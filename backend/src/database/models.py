@@ -10,6 +10,7 @@ class Video(Base):
     video_id = Column(String, primary_key=True)
     file_path = Column(String, nullable=False, unique=True, index=True)
     filename = Column(String, nullable=False)
+    file_hash = Column(String, index=True)  # SHA-256 hash for deduplication
     duration = Column(Float)  # Duration in seconds
     file_size = Column(Integer)  # File size in bytes
     processed_at = Column(DateTime)

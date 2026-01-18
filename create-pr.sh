@@ -1,63 +1,107 @@
 #!/bin/bash
 
-# Create pull request for database schema implementation
+# Create pull request for Task 3 - Database Access Layer implementation
 
 gh pr create \
-  --title "feat(database): Complete database schema implementation with 8 tables and migrations" \
+  --title "feat(database): implement Task 3 - Database Access Layer with clean architecture" \
   --body "## Summary
 
-This PR implements the complete database schema for the Eioku semantic video search platform, covering Task 2 (Create database schema and migrations) from the implementation plan.
+This PR implements Task 3 from the implementation plan - Database Access Layer for the Eioku semantic video search platform. Building on the clean architecture foundation from Task 2, this adds comprehensive data access patterns and business logic layers.
 
 ## Changes Made
 
-### Database Tables Implemented
-- **Videos table** - Core video metadata with file paths, duration, processing status
-- **Transcriptions table** - Speech-to-text segments with timestamps and speaker identification  
-- **Scenes table** - Scene boundaries with thumbnails for video navigation
-- **Objects table** - Object detection results with bounding boxes and timestamps
-- **Faces table** - Face detection with person clustering and confidence scores
-- **Topics table** - Topic extraction with keywords and relevance scores
-- **PathConfigs table** - Video source path configuration with recursive scanning
-- **Tasks table** - Processing task queue with dependencies and status tracking
+### Clean Architecture Implementation
+- **Domain Models** - Pure business objects decoupled from persistence
+- **Repository Pattern** - Abstract interfaces with SQLAlchemy implementations
+- **Service Layer** - Business logic and domain operations
+- **API Controllers** - FastAPI REST endpoints with OpenAPI documentation
+- **Dependency Injection** - Proper IoC for testability and modularity
 
-### Infrastructure
-- **SQLAlchemy 2.0** models with proper relationships and constraints
-- **Alembic migrations** for each table with upgrade/downgrade support
-- **Migration runner** that executes on FastAPI startup
-- **Modern FastAPI patterns** using lifespan events instead of deprecated on_event
-- **Comprehensive testing** with 12 tests covering all models and migrations
+### Video Management (Task 3.1)
+- **VideoRepository** - Complete CRUD operations with domain/entity mapping
+- **VideoService** - Business logic for video lifecycle management
+- **Video API** - Full REST endpoints for video operations
+- **File Hash Support** - Ready for discovery process integration
 
-### Key Features
-- **Foreign key relationships** between all tables and Videos
-- **Performance indexes** on frequently queried columns (video_id, status, labels)
-- **JSON fields** for complex data (timestamps, bounding boxes, keywords, dependencies)
-- **Unique constraints** to prevent duplicate entries
-- **Audit timestamps** for created_at and updated_at tracking
-- **Environment configuration** for database URL override
+### Database Features
+- **Modern SQLAlchemy 2.0** - Latest patterns and best practices
+- **Alembic Migrations** - Database schema versioning and evolution
+- **Connection Management** - Proper session handling and dependency injection
+- **Performance Indexes** - Optimized queries on frequently accessed columns
+
+### API Features
+- **OpenAPI 3.0 Spec** - Auto-generated documentation at /docs and /redoc
+- **JSON Schema Validation** - Automatic request/response validation with detailed errors
+- **REST Endpoints** - Clean, consistent API design following HTTP standards
+- **Error Handling** - Proper HTTP status codes and structured error responses
+- **No Hardcoded Prefixes** - Reverse proxy handles /api routing
+
+## API Endpoints
+
+### Video Management
+- \`POST /v1/videos/\` - Create video for processing
+- \`GET /v1/videos/{id}\` - Get video by ID
+- \`GET /v1/videos/\` - List videos (filterable by status)
+- \`PATCH /v1/videos/{id}\` - Update video metadata/status
+- \`DELETE /v1/videos/{id}\` - Delete video and associated data
+
+## Architecture Benefits
+
+### For Orchestrator (Internal)
+- **Direct Service Access** - No HTTP overhead for internal operations
+- **Type Safety** - Full TypeScript-like type checking with modern Python
+- **Business Logic** - Rich domain models with validation and business rules
+- **Transaction Support** - Proper database transaction management
+
+### For External Clients
+- **REST API** - Standard HTTP interface with comprehensive documentation
+- **OpenAPI Integration** - Auto-generated client SDKs and documentation
+- **JSON Validation** - Automatic request/response validation
+- **Error Handling** - Structured error responses with detailed messages
 
 ## Testing
 
-- ✅ **12 tests passing** - All models and migrations tested
-- ✅ **Code quality** - Ruff linting passes, follows PEP 8
-- ✅ **Migration validation** - All migrations can upgrade and downgrade
-- ✅ **Foreign key integrity** - Relationships properly enforced
-- ✅ **JSON field support** - Complex data structures work correctly
+- ✅ **24 comprehensive tests** - Full coverage including API endpoints
+- ✅ **Database isolation** - Each test uses temporary database
+- ✅ **Integration tests** - End-to-end API testing with real database
+- ✅ **Unit tests** - Domain models, services, and repositories
+- ✅ **Quality gates** - Ruff formatting and linting pass
 
 ## Requirements Traceability
 
 This implementation covers:
-- **Task 2.1-2.8** - All 8 database tables with proper schema
-- **Task 2.9** - Migration scripts and schema versioning
-- **Requirements 1.1, 1.4, 1.5, 4.1, 4.4, 6.2, 6.5, 7.1, 7.2, 9.1, 9.2, 10.4, 10.6, 10.7, 10.9, 10.10**
+- **Task 3.1** - Video DAO with CRUD operations and query methods
+- **Task 3.9** - Database connection management with session handling
+- **Task 3.10** - Comprehensive unit tests for data access layer
+- **Requirements 4.1, 4.2, 4.3** - Video management and query operations
+
+## Technical Details
+
+### Domain-Driven Design
+- **Pure domain models** - No persistence concerns in business logic
+- **Repository abstraction** - Interface-based data access for testability
+- **Service layer** - Encapsulates business rules and workflows
+- **Clean boundaries** - Clear separation between layers
+
+### Modern Python Patterns
+- **Type annotations** - Full type safety with X | Y union syntax
+- **Dependency injection** - FastAPI's built-in DI container
+- **Async support** - Ready for async operations when needed
+- **Error handling** - Structured exceptions with proper HTTP mapping
 
 ## Next Steps
 
-Ready for Task 3: Implement database access layer (DAOs) for CRUD operations on each table.
+Ready for:
+1. **Task 3.2-3.8** - Additional repository implementations (Transcription, Scene, Object, Face, Topic, PathConfig, Task)
+2. **Task 4** - Path management and video discovery
+3. **Task 5** - Task orchestration system
+4. **Integration** - Connect with video processing pipeline
 
 ## Deployment Notes
 
-- Database migrations run automatically on application startup
-- SQLite default with environment variable override support
-- No breaking changes to existing API endpoints" \
-  --head feature/task-1-implementation \
+- **Database migrations** - Run automatically on application startup
+- **Environment configuration** - Database URL configurable via environment variables
+- **Reverse proxy ready** - No hardcoded API prefixes
+- **Container friendly** - Works with Docker and container orchestration" \
+  --head feature/task-3-database-access-layer \
   --base main

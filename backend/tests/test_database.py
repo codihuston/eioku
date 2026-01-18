@@ -39,7 +39,7 @@ def test_database_migrations_run_on_startup():
                 # Verify the app responds
                 response = client.get("/health")
                 assert response.status_code == 200
-                assert response.json() == {"status": "ok"}
+                assert response.json() == {"status": "healthy"}
 
                 # Verify the database file was created
                 assert os.path.exists(test_db_path)
