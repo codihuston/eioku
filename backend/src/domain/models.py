@@ -174,3 +174,41 @@ class Face:
     def is_identified(self) -> bool:
         """Check if face has been identified with a person ID."""
         return self.person_id is not None
+
+
+class Topic:
+    """Domain model for Topic - pure business object."""
+
+    def __init__(
+        self,
+        topic_id: str,
+        video_id: str,
+        label: str,
+        keywords: list[str],
+        relevance_score: float,
+        timestamps: list[float],
+        created_at: datetime | None = None,
+    ):
+        self.topic_id = topic_id
+        self.video_id = video_id
+        self.label = label
+        self.keywords = keywords
+        self.relevance_score = relevance_score
+        self.timestamps = timestamps
+        self.created_at = created_at
+
+    def get_occurrence_count(self) -> int:
+        """Get number of times topic appears in video."""
+        return len(self.timestamps)
+
+    def get_first_appearance(self) -> float | None:
+        """Get timestamp of first appearance."""
+        return min(self.timestamps) if self.timestamps else None
+
+    def get_last_appearance(self) -> float | None:
+        """Get timestamp of last appearance."""
+        return max(self.timestamps) if self.timestamps else None
+
+    def is_highly_relevant(self, threshold: float = 0.8) -> bool:
+        """Check if topic has high relevance score."""
+        return self.relevance_score >= threshold

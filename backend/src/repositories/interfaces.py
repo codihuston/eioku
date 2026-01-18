@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from ..domain.models import Face, Object, Scene, Transcription, Video
+from ..domain.models import Face, Object, Scene, Topic, Transcription, Video
 
 
 class VideoRepository(ABC):
@@ -127,4 +127,33 @@ class FaceRepository(ABC):
     @abstractmethod
     def delete_by_video_id(self, video_id: str) -> bool:
         """Delete all faces for a video."""
+        pass
+
+
+class TopicRepository(ABC):
+    """Abstract repository interface for Topic persistence."""
+
+    @abstractmethod
+    def save(self, topic: Topic) -> Topic:
+        """Save topic to persistence layer."""
+        pass
+
+    @abstractmethod
+    def find_by_video_id(self, video_id: str) -> list[Topic]:
+        """Find all topics for a video."""
+        pass
+
+    @abstractmethod
+    def find_by_label(self, video_id: str, label: str) -> list[Topic]:
+        """Find topics by label within a video."""
+        pass
+
+    @abstractmethod
+    def get_aggregated_topics(self) -> list[dict]:
+        """Get aggregated topics across all videos."""
+        pass
+
+    @abstractmethod
+    def delete_by_video_id(self, video_id: str) -> bool:
+        """Delete all topics for a video."""
         pass
