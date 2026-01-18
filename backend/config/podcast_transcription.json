@@ -1,0 +1,54 @@
+{
+  "name": "podcast_transcription",
+  "description": "Optimized for podcast transcription with minimal visual processing",
+  "workers": {
+    "hash": {
+      "count": 8,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "transcription": {
+      "count": 6,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "scene_detection": {
+      "count": 1,
+      "priority": 4,
+      "resource": "cpu"
+    },
+    "object_detection": {
+      "count": 1,
+      "priority": 4,
+      "resource": "gpu"
+    },
+    "face_detection": {
+      "count": 1,
+      "priority": 4,
+      "resource": "gpu"
+    },
+    "topic_extraction": {
+      "count": 3,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "embedding_generation": {
+      "count": 4,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "thumbnail_generation": {
+      "count": 1,
+      "priority": 4,
+      "resource": "cpu"
+    }
+  },
+  "task_settings": {
+    "max_concurrent_videos": 12,
+    "frame_sampling_interval": 300,
+    "face_sampling_interval_seconds": 60.0,
+    "transcription_model": "large-v3-turbo",
+    "object_detection_model": "yolov8n.pt",
+    "face_detection_model": "yolov8n-face.pt"
+  }
+}
