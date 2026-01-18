@@ -66,9 +66,21 @@ class TaskOrchestrator:
         discovered_videos = self.video_repository.find_by_status("discovered")
         total_created = 0
 
+        logger.info(f"Found {len(discovered_videos)} discovered videos to process")
+
         for video in discovered_videos:
+            logger.info(
+                f"Processing discovered video: {video.video_id} - {video.filename}"
+            )
             tasks = self.create_tasks_for_video(video)
             total_created += len(tasks)
+
+            if tasks:
+                logger.info(f"Created {len(tasks)} tasks for video {video.video_id}")
+                for task in tasks:
+                    logger.info(f"  - {task.task_type} task: {task.task_id}")
+            else:
+                logger.warning(f"No tasks created for video {video.video_id}")
 
         logger.info(
             f"Created {total_created} tasks for {len(discovered_videos)} "
