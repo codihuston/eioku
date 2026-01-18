@@ -17,18 +17,33 @@ class SQLAlchemyPathConfigRepository(PathConfigRepository):
 
     def save(self, path_config: PathConfig) -> PathConfig:
         """Save path config to database."""
-        entity = PathConfigEntity(
-            path_id=path_config.path_id,
-            path=path_config.path,
-            recursive="true" if path_config.recursive else "false",
-            added_at=path_config.added_at or datetime.utcnow(),
+        # Check if entity already exists
+        existing_entity = (
+            self.session.query(PathConfigEntity)
+            .filter(PathConfigEntity.path_id == path_config.path_id)
+            .first()
         )
 
-        self.session.add(entity)
-        self.session.commit()
-        self.session.refresh(entity)
+        if existing_entity:
+            # Update existing entity
+            existing_entity.recursive = "true" if path_config.recursive else "false"
+            self.session.commit()
+            self.session.refresh(existing_entity)
+            return self._entity_to_domain(existing_entity)
+        else:
+            # Create new entity
+            entity = PathConfigEntity(
+                path_id=path_config.path_id,
+                path=path_config.path,
+                recursive="true" if path_config.recursive else "false",
+                added_at=path_config.added_at or datetime.utcnow(),
+            )
 
-        return self._entity_to_domain(entity)
+            self.session.add(entity)
+            self.session.commit()
+            self.session.refresh(entity)
+
+            return self._entity_to_domain(entity)
 
     def find_all(self) -> list[PathConfig]:
         """Find all configured paths."""
