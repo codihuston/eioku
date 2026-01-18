@@ -65,3 +65,15 @@ class Face(Base):
     bounding_boxes = Column(JSON, nullable=False)  # Bounding box coordinates
     confidence = Column(Float)                     # Face detection confidence
     created_at = Column(DateTime, server_default=func.now())
+
+
+class Topic(Base):
+    __tablename__ = "topics"
+
+    topic_id = Column(String, primary_key=True)
+    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
+    label = Column(String, nullable=False, index=True)  # Topic label
+    keywords = Column(JSON, nullable=False)        # Related keywords
+    relevance_score = Column(Float, nullable=False)  # Topic relevance score
+    timestamps = Column(JSON, nullable=False)      # Timestamps where topic appears
+    created_at = Column(DateTime, server_default=func.now())
