@@ -216,6 +216,16 @@ class TaskRepository(ABC):
         pass
 
     @abstractmethod
+    def find_by_video_and_type(self, video_id: str, task_type: str) -> list[Task]:
+        """Find tasks by video ID and task type."""
+        pass
+
+    @abstractmethod
+    def find_by_video_and_status(self, video_id: str, status: str) -> list[Task]:
+        """Find tasks by video ID and status."""
+        pass
+
+    @abstractmethod
     def delete_by_video_id(self, video_id: str) -> bool:
         """Delete all tasks for a video."""
         pass
