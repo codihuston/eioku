@@ -86,3 +86,18 @@ class PathConfig(Base):
     path = Column(String, nullable=False, unique=True)  # File system path
     recursive = Column(String, nullable=False, default="true")  # Scan recursively
     added_at = Column(DateTime, server_default=func.now())
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    task_id = Column(String, primary_key=True)
+    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
+    task_type = Column(String, nullable=False, index=True)  # transcription, scene, etc
+    status = Column(String, nullable=False, default="pending", index=True)  # Status
+    priority = Column(Integer, nullable=False, default=5)  # 1=highest, 10=lowest
+    dependencies = Column(JSON)  # List of task_ids that must complete first
+    created_at = Column(DateTime, server_default=func.now())
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    error = Column(Text)  # Error message if failed
