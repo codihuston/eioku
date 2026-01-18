@@ -99,7 +99,7 @@ class SQLAlchemyTaskRepository(TaskRepository):
             .filter(TaskEntity.task_type == task_type)
             .all()
         )
-        return [self._to_domain(entity) for entity in entities]
+        return [self._entity_to_domain(entity) for entity in entities]
 
     def find_by_video_and_status(self, video_id: str, status: str) -> list[Task]:
         """Find tasks by video ID and status."""
@@ -109,4 +109,27 @@ class SQLAlchemyTaskRepository(TaskRepository):
             .filter(TaskEntity.status == status)
             .all()
         )
-        return [self._to_domain(entity) for entity in entities]
+        return [self._entity_to_domain(entity) for entity in entities]
+
+    def update(self, task: Task) -> Task:
+        """Update task in database."""
+        entity = (
+            self.session.query(TaskEntity)
+            .filter(TaskEntity.task_id == task.task_id)
+            .first()
+        )
+
+        if not entity:
+            raise ValueError(f"Task not found: {task.task_id}")
+
+        entity.status = task.status
+        entity.priority = task.priority
+        entity.dependencies = task.dependencies
+        entity.started_at = task.started_at
+        entity.completed_at = task.completed_at
+        entity.error = task.error
+
+        self.session.commit()
+        self.session.refresh(entity)
+
+        return self._entity_to_domain(entity)

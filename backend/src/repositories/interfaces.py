@@ -40,6 +40,11 @@ class VideoRepository(ABC):
         """Delete video by ID."""
         pass
 
+    @abstractmethod
+    def find_all(self) -> list[Video]:
+        """Find all videos."""
+        pass
+
 
 class TranscriptionRepository(ABC):
     """Abstract repository interface for Transcription persistence."""

@@ -66,9 +66,21 @@ class TaskOrchestrator:
         discovered_videos = self.video_repository.find_by_status("discovered")
         total_created = 0
 
+        logger.info(f"Found {len(discovered_videos)} discovered videos to process")
+
         for video in discovered_videos:
+            logger.info(
+                f"Processing discovered video: {video.video_id} - {video.filename}"
+            )
             tasks = self.create_tasks_for_video(video)
             total_created += len(tasks)
+
+            if tasks:
+                logger.info(f"Created {len(tasks)} tasks for video {video.video_id}")
+                for task in tasks:
+                    logger.info(f"  - {task.task_type} task: {task.task_id}")
+            else:
+                logger.warning(f"No tasks created for video {video.video_id}")
 
         logger.info(
             f"Created {total_created} tasks for {len(discovered_videos)} "
@@ -88,7 +100,7 @@ class TaskOrchestrator:
             # Update video status to processing if tasks were created
             if tasks:
                 video.mark_processing()
-                self.video_repository.update(video)
+                self.video_repository.save(video)
 
         logger.info(
             f"Created {total_created} tasks for {len(hashed_videos)} hashed videos"
@@ -112,7 +124,7 @@ class TaskOrchestrator:
             video = self.video_repository.find_by_id(task.video_id)
             if video:
                 video.status = "hashed"
-                self.video_repository.update(video)
+                self.video_repository.save(video)
                 logger.info(f"Updated video {task.video_id} status to hashed")
 
         # Check if we can create dependent tasks
@@ -142,7 +154,7 @@ class TaskOrchestrator:
             video = self.video_repository.find_by_id(task.video_id)
             if video:
                 video.status = "failed"
-                self.video_repository.update(video)
+                self.video_repository.save(video)
 
         logger.error(
             f"Task {task_type.value} failed for video {task.video_id}: {error}"
@@ -250,5 +262,5 @@ class TaskOrchestrator:
             video = self.video_repository.find_by_id(video_id)
             if video and video.status != "completed":
                 video.mark_completed()
-                self.video_repository.update(video)
+                self.video_repository.save(video)
                 logger.info(f"Video {video_id} processing completed")

@@ -91,8 +91,39 @@ async def discover_videos(
         discovered_videos = discovery_service.discover_videos()
         logger.info(f"Discovery completed. Found {len(discovered_videos)} videos")
 
+        # Auto-create hash tasks for discovered videos that aren't hashed yet
+        import uuid
+        from datetime import datetime
+
+        from sqlalchemy import text
+
+        hash_tasks_created = 0
+        for video in discovered_videos:
+            if video.status == "discovered":
+                # Create hash task
+                task_id = str(uuid.uuid4())
+                discovery_service.video_repository.session.execute(
+                    text(
+                        """
+                        INSERT INTO tasks (task_id, video_id, task_type, status, priority,
+                                          dependencies, created_at)
+                        VALUES (:task_id, :video_id, 'hash', 'pending', 1, '[]', :created_at)
+                    """  # noqa: E501
+                    ),
+                    {
+                        "task_id": task_id,
+                        "video_id": video.video_id,
+                        "created_at": datetime.utcnow(),
+                    },
+                )
+                hash_tasks_created += 1
+
+        discovery_service.video_repository.session.commit()
+        logger.info(f"Created {hash_tasks_created} hash tasks")
+
         result = {
             "message": f"Discovered {len(discovered_videos)} videos",
+            "hash_tasks_created": hash_tasks_created,
             "videos": [
                 {
                     "video_id": v.video_id,

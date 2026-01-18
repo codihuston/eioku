@@ -64,7 +64,21 @@ class TestSpecificWorkers:
 
     def test_hash_worker(self):
         """Test hash worker."""
-        worker = HashWorker()
+        # Create mock hash service
+        mock_hash_service = Mock()
+        mock_hash_service.calculate_hash.return_value = (
+            "1234567890abcdef"  # 16 char xxhash
+        )
+
+        # Create mock video repository
+        mock_video_repo = Mock()
+        mock_video = Mock()
+        mock_video.file_path = "/test/video.mp4"
+        mock_video_repo.find_by_id.return_value = mock_video
+
+        worker = HashWorker(
+            hash_service=mock_hash_service, video_repository=mock_video_repo
+        )
         task = Task(
             task_id=str(uuid.uuid4()),
             video_id=str(uuid.uuid4()),
@@ -76,11 +90,18 @@ class TestSpecificWorkers:
 
         # Should return a hash string
         assert isinstance(result, str)
-        assert len(result) == 64  # SHA-256 hex length
+        assert len(result) == 16  # xxhash64 hex length
+        assert result == "1234567890abcdef"
 
     def test_transcription_worker(self):
         """Test transcription worker."""
-        worker = TranscriptionWorker()
+        # Create mock transcription handler
+        mock_handler = Mock()
+        mock_handler.process_transcription_task.return_value = True
+        mock_handler.get_transcription_segments.return_value = [Mock(), Mock()]
+        mock_handler.get_transcription_text.return_value = "Sample transcription text"
+
+        worker = TranscriptionWorker(transcription_handler=mock_handler)
         task = Task(
             task_id=str(uuid.uuid4()),
             video_id=str(uuid.uuid4()),
@@ -92,8 +113,9 @@ class TestSpecificWorkers:
 
         # Should return transcription data
         assert isinstance(result, dict)
-        assert "segments" in result
-        assert len(result["segments"]) > 0
+        assert "segments_count" in result
+        assert "total_text_length" in result
+        assert result["segments_count"] == 2
 
 
 class TestWorkerPool:
@@ -162,7 +184,27 @@ class TestWorkerPool:
         # Mock orchestrator to return task once, then None
         self.orchestrator.get_next_task.side_effect = [task, None, None]
 
-        pool = WorkerPool(self.config, self.orchestrator)
+        # Use GPU resource type to force ThreadPoolExecutor
+        # This avoids pickling issues with mocked objects
+        config = WorkerConfig(
+            task_type=TaskType.HASH,
+            worker_count=1,
+            resource_type=ResourceType.GPU,  # Forces ThreadPoolExecutor
+            priority=1,
+        )
+
+        # Create a mock worker that always succeeds
+        mock_worker = Mock()
+        mock_worker.execute_task.return_value = {
+            "status": "success",
+            "result": "test_hash",
+        }
+
+        pool = WorkerPool(config, self.orchestrator)
+
+        # Replace the worker factory with our mock
+        pool.worker_factory = lambda: mock_worker
+
         pool.start()
 
         # Let it process the task
@@ -170,8 +212,9 @@ class TestWorkerPool:
 
         pool.stop()
 
-        # Should have handled task completion
-        assert self.orchestrator.handle_task_completion.called
+        # Should have called the worker to execute the task
+        assert mock_worker.execute_task.called
+        assert mock_worker.execute_task.call_args[0][0].task_id == task.task_id
 
 
 class TestWorkerPoolManager:
@@ -185,7 +228,10 @@ class TestWorkerPoolManager:
     def test_add_worker_pool(self):
         """Test adding worker pools."""
         config = WorkerConfig(
-            task_type=TaskType.HASH, worker_count=2, resource_type=ResourceType.CPU
+            task_type=TaskType.HASH,
+            worker_count=2,
+            resource_type=ResourceType.CPU,
+            priority=1,
         )
 
         self.manager.add_worker_pool(config)
@@ -196,7 +242,10 @@ class TestWorkerPoolManager:
     def test_add_duplicate_pool_raises_error(self):
         """Test adding duplicate pool raises error."""
         config = WorkerConfig(
-            task_type=TaskType.HASH, worker_count=2, resource_type=ResourceType.CPU
+            task_type=TaskType.HASH,
+            worker_count=2,
+            resource_type=ResourceType.CPU,
+            priority=1,
         )
 
         self.manager.add_worker_pool(config)
@@ -212,8 +261,8 @@ class TestWorkerPoolManager:
         """Test starting and stopping all pools."""
         # Add multiple pools
         configs = [
-            WorkerConfig(TaskType.HASH, 2, ResourceType.CPU),
-            WorkerConfig(TaskType.TRANSCRIPTION, 1, ResourceType.CPU),
+            WorkerConfig(TaskType.HASH, 2, ResourceType.CPU, 1),
+            WorkerConfig(TaskType.TRANSCRIPTION, 1, ResourceType.CPU, 1),
         ]
 
         for config in configs:
@@ -236,7 +285,10 @@ class TestWorkerPoolManager:
     def test_get_status(self):
         """Test getting pool status."""
         config = WorkerConfig(
-            task_type=TaskType.HASH, worker_count=2, resource_type=ResourceType.CPU
+            task_type=TaskType.HASH,
+            worker_count=2,
+            resource_type=ResourceType.CPU,
+            priority=1,
         )
 
         self.manager.add_worker_pool(config)

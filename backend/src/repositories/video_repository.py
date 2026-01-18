@@ -95,6 +95,11 @@ class SqlVideoRepository(VideoRepository):
             return True
         return False
 
+    def find_all(self) -> list[Video]:
+        """Find all videos."""
+        entities = self.session.query(VideoEntity).all()
+        return [self._to_domain(entity) for entity in entities]
+
     def _to_entity(self, domain: Video) -> VideoEntity:
         """Convert domain model to SQLAlchemy entity."""
         return VideoEntity(

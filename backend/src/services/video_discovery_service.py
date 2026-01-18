@@ -115,17 +115,26 @@ class VideoDiscoveryService:
             return None
 
     def validate_existing_videos(self) -> list[Video]:
-        """Validate that existing videos still exist on filesystem."""
+        """Validate existing videos exist on filesystem and clean up orphaned tasks."""
         missing_videos = []
         # Check all videos that have been discovered or completed
         all_videos = []
         all_videos.extend(self.video_repository.find_by_status("discovered"))
         all_videos.extend(self.video_repository.find_by_status("completed"))
+        all_videos.extend(self.video_repository.find_by_status("hashed"))
+        all_videos.extend(self.video_repository.find_by_status("processing"))
 
         for video in all_videos:
             if not Path(video.file_path).exists():
-                video.status = "missing"
-                self.video_repository.save(video)
+                logger.info(
+                    f"Video missing from filesystem: {video.filename} "
+                    f"at {video.file_path}"
+                )
+
+                # Delete the video from database
+                self.video_repository.delete(video.video_id)
                 missing_videos.append(video)
+
+                logger.info(f"Removed missing video {video.video_id} from database")
 
         return missing_videos

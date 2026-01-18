@@ -29,7 +29,9 @@ def run_migrations():
         alembic_cfg.set_main_option("sqlalchemy.url", database_url)
 
         # Run migrations
+        print("🔧 About to run alembic upgrade...")
         command.upgrade(alembic_cfg, "head")
+        print("🔧 Alembic upgrade completed")
 
         logger.info("Database migrations completed successfully")
 

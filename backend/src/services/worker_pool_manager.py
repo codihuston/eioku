@@ -4,7 +4,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -31,7 +31,7 @@ class WorkerConfig:
     task_type: TaskType
     worker_count: int
     resource_type: ResourceType
-    priority: int = 3  # 1=critical, 2=high, 3=medium, 4=low
+    priority: int
 
 
 class TaskWorker:
@@ -76,33 +76,77 @@ class TaskWorker:
 class HashWorker(TaskWorker):
     """Worker for hash calculation tasks."""
 
-    def __init__(self):
+    def __init__(self, hash_service=None, video_repository=None):
         super().__init__(TaskType.HASH)
+        from .file_hash_service import FileHashService
+
+        self.hash_service = hash_service or FileHashService()
+        self.video_repository = video_repository
 
     def _do_work(self, task: Task) -> str:
         """Calculate file hash."""
-        # TODO: Implement actual hash calculation
-        import hashlib
+        # Get video from repository to get the file path
+        if not self.video_repository:
+            raise RuntimeError("HashWorker requires a video_repository")
 
-        # Simulate hash calculation
-        time.sleep(0.05)  # Fast operation
-        return hashlib.sha256(f"fake_content_{task.video_id}".encode()).hexdigest()
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise RuntimeError(f"Video not found: {task.video_id}")
+
+        try:
+            hash_value = self.hash_service.calculate_hash(video.file_path)
+            logger.info(f"Calculated hash for {task.video_id}: {hash_value}")
+
+            # Update video with hash
+            video.file_hash = hash_value
+            self.video_repository.save(video)
+
+            return hash_value
+        except Exception as e:
+            logger.error(f"Hash calculation failed for {task.video_id}: {e}")
+            raise
 
 
 class TranscriptionWorker(TaskWorker):
     """Worker for transcription tasks."""
 
-    def __init__(self):
+    def __init__(self, transcription_handler=None):
         super().__init__(TaskType.TRANSCRIPTION)
+        self.transcription_handler = transcription_handler
 
     def _do_work(self, task: Task) -> dict:
-        """Perform transcription."""
-        # TODO: Implement actual transcription with Whisper
-        time.sleep(2.0)  # Simulate longer processing
+        """Perform transcription using Whisper."""
+        if not self.transcription_handler:
+            raise RuntimeError("TranscriptionWorker requires a transcription_handler")
+
+        # Get video from repository (would need to be injected)
+        # For now, create a minimal video object
+        from datetime import datetime
+
+        from ..domain.models import Video
+
+        # Simplified approach - in production, we'd inject the video repository
+        video = Video(
+            video_id=task.video_id,
+            file_path=f"/media/{task.video_id}",  # Placeholder path
+            filename=f"{task.video_id}.mkv",
+            last_modified=datetime.utcnow(),
+        )
+
+        # Process transcription
+        success = self.transcription_handler.process_transcription_task(task, video)
+
+        if not success:
+            raise RuntimeError("Transcription processing failed")
+
+        # Get transcription segments for result
+        segments = self.transcription_handler.get_transcription_segments(task.video_id)
+
         return {
-            "segments": [
-                {"start": 0.0, "end": 5.0, "text": "Sample transcription segment"}
-            ]
+            "segments_count": len(segments),
+            "total_text_length": len(
+                self.transcription_handler.get_transcription_text(task.video_id)
+            ),
         }
 
 
@@ -158,12 +202,8 @@ class WorkerPool:
         self.is_running = True
         self._stop_event.clear()
 
-        # Create appropriate executor based on resource type
-        if self.config.resource_type == ResourceType.CPU:
-            self.executor = ProcessPoolExecutor(max_workers=self.config.worker_count)
-        else:
-            # Use thread pool for GPU/IO tasks to avoid multiprocessing overhead
-            self.executor = ThreadPoolExecutor(max_workers=self.config.worker_count)
+        # Use thread pool for all tasks to avoid pickling issues with database sessions
+        self.executor = ThreadPoolExecutor(max_workers=self.config.worker_count)
 
         # Start worker threads
         for i in range(self.config.worker_count):
@@ -201,51 +241,113 @@ class WorkerPool:
 
     def _worker_loop(self) -> None:
         """Main loop for worker threads."""
+        from ..database.connection import get_db
+        from ..repositories.task_repository import SQLAlchemyTaskRepository
+        from ..repositories.video_repository import SqlVideoRepository
+
+        # Create session and repositories for this worker thread
+        session = next(get_db())
+        video_repo = SqlVideoRepository(session)
+        task_repo = SQLAlchemyTaskRepository(session)
+
         worker = self.worker_factory()
 
-        while self.is_running and not self._stop_event.is_set():
-            try:
-                # Get next task from orchestrator
-                task = self.orchestrator.get_next_task(self.config.task_type)
-
-                if task is None:
-                    # No tasks available, wait a bit
-                    time.sleep(0.1)
-                    continue
-
-                # Submit task to executor
-                future = self.executor.submit(worker.execute_task, task)
-
-                # Wait for completion and handle result
+        try:
+            while self.is_running and not self._stop_event.is_set():
                 try:
-                    result = future.result(timeout=300)  # 5 minute timeout
+                    # Get next task from orchestrator
+                    task = self.orchestrator.get_next_task(self.config.task_type)
 
-                    if result["status"] == "success":
-                        self.orchestrator.handle_task_completion(task)
-                    else:
-                        self.orchestrator.handle_task_failure(task, result["error"])
+                    if task is None:
+                        # No tasks available, wait a bit
+                        time.sleep(0.1)
+                        continue
+
+                    # Submit task to executor
+                    future = self.executor.submit(worker.execute_task, task)
+
+                    # Wait for completion and handle result
+                    try:
+                        result = future.result(timeout=300)  # 5 minute timeout
+
+                        if result["status"] == "success":
+                            # Update task status in database
+                            task.complete()
+                            task_repo.update(task)
+
+                            # Update video status if this was a hash task
+                            if self.config.task_type == TaskType.HASH:
+                                video = video_repo.find_by_id(task.video_id)
+                                if video:
+                                    video.status = "hashed"
+                                    video_repo.save(video)
+                                    vid_id = task.video_id
+                                    logger.info(f"Updated video {vid_id} to hashed")
+
+                            task_type = self.config.task_type.value
+                            logger.info(f"Completed {task_type} task {task.task_id}")
+                        else:
+                            # Update task as failed
+                            task.fail(result["error"])
+                            task_repo.update(task)
+                            logger.error(
+                                f"Task {task.task_id} failed: {result['error']}"
+                            )
+
+                    except Exception as e:
+                        error_msg = f"Worker execution failed: {str(e)}"
+                        task.fail(error_msg)
+                        task_repo.update(task)
+                        logger.error(f"Task {task.task_id} failed: {error_msg}")
 
                 except Exception as e:
-                    error_msg = f"Worker execution failed: {str(e)}"
-                    self.orchestrator.handle_task_failure(task, error_msg)
-
-            except Exception as e:
-                logger.error(f"Worker loop error: {e}")
-                time.sleep(1.0)  # Prevent tight error loops
+                    logger.error(f"Worker loop error: {e}")
+                    time.sleep(1.0)  # Prevent tight error loops
+        finally:
+            session.close()
 
     def _get_worker_factory(self) -> Callable[[], TaskWorker]:
         """Get worker factory for task type."""
-        factories = {
-            TaskType.HASH: HashWorker,
-            TaskType.TRANSCRIPTION: TranscriptionWorker,
-            TaskType.SCENE_DETECTION: SceneDetectionWorker,
-            TaskType.OBJECT_DETECTION: ObjectDetectionWorker,
-            TaskType.FACE_DETECTION: TaskWorker,  # Generic for now
-            TaskType.TOPIC_EXTRACTION: TaskWorker,  # Generic for now
-            TaskType.EMBEDDING_GENERATION: TaskWorker,  # Generic for now
-            TaskType.THUMBNAIL_GENERATION: TaskWorker,  # Generic for now
-        }
-        return factories.get(self.config.task_type, TaskWorker)
+        if self.config.task_type == TaskType.HASH:
+            from ..database.connection import get_db
+            from ..repositories.video_repository import SqlVideoRepository
+            from .file_hash_service import FileHashService
+
+            def create_hash_worker():
+                session = next(get_db())
+                video_repo = SqlVideoRepository(session)
+                hash_service = FileHashService()
+                return HashWorker(
+                    hash_service=hash_service, video_repository=video_repo
+                )
+
+            return create_hash_worker
+        elif self.config.task_type == TaskType.TRANSCRIPTION:
+            from ..database.connection import get_db
+            from ..repositories.transcription_repository import (
+                SqlTranscriptionRepository,
+            )
+            from .audio_extraction_service import AudioExtractionService
+            from .transcription_task_handler import TranscriptionTaskHandler
+            from .whisper_transcription_service import WhisperTranscriptionService
+
+            # Create transcription handler with dependencies
+            def create_transcription_worker():
+                session = next(get_db())
+                transcription_repo = SqlTranscriptionRepository(session)
+                audio_service = AudioExtractionService()
+                whisper_service = WhisperTranscriptionService()
+                transcription_handler = TranscriptionTaskHandler(
+                    transcription_repository=transcription_repo,
+                    audio_service=audio_service,
+                    whisper_service=whisper_service,
+                )
+                return TranscriptionWorker(transcription_handler=transcription_handler)
+
+            return create_transcription_worker
+        else:
+            # Generic workers for other task types
+            return TaskWorker
 
 
 class WorkerPoolManager:
