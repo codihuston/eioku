@@ -238,6 +238,11 @@ The system uses configurable processing profiles to control resource allocation 
 {
   "profile": "balanced",
   "workers": {
+    "hash": {
+      "count": 4,
+      "priority": "critical",
+      "resource": "cpu"
+    },
     "transcription": {
       "count": 2,
       "priority": "high",
@@ -300,6 +305,11 @@ The system uses configurable processing profiles to control resource allocation 
 {
   "profile": "search_first",
   "workers": {
+    "hash": {
+      "count": 6,
+      "priority": "critical",
+      "resource": "cpu"
+    },
     "transcription": {
       "count": 4,
       "priority": "critical",
@@ -355,6 +365,11 @@ The system uses configurable processing profiles to control resource allocation 
 {
   "profile": "visual_first",
   "workers": {
+    "hash": {
+      "count": 3,
+      "priority": "critical",
+      "resource": "cpu"
+    },
     "transcription": {
       "count": 1,
       "priority": "medium",
@@ -410,6 +425,11 @@ The system uses configurable processing profiles to control resource allocation 
 {
   "profile": "low_resource",
   "workers": {
+    "hash": {
+      "count": 2,
+      "priority": "critical",
+      "resource": "cpu"
+    },
     "transcription": {
       "count": 1,
       "priority": "high",
@@ -534,18 +554,27 @@ stateDiagram-v2
 - **QueueProcessing**: Add videos to processing queue
 - **ShowProgress**: Navigate to processing status view
 
-### Flow 3: Video Processing Pipeline (Parallel Architecture)
+### Flow 3: Video Processing Pipeline (Hash-First Architecture)
 
 ```mermaid
 graph TB
-    Start([Video Added]) --> CheckDup{Already Processed?}
-    CheckDup -->|Yes| Skip([Skip])
-    CheckDup -->|No| CreateTasks[Create Processing Tasks]
+    Start([Video Discovered]) --> CheckStatus{Check Video Status}
+    CheckStatus -->|discovered| CreateHashTask[Create Hash Task]
+    CheckStatus -->|hashed| CreateParallelTasks[Create Parallel Tasks]
+    CheckStatus -->|processing/completed| Skip([Skip - Already Processing])
     
-    CreateTasks --> TransTask[Transcription Task]
-    CreateTasks --> SceneTask[Scene Detection Task]
-    CreateTasks --> ObjTask[Object Detection Task]
-    CreateTasks --> FaceTask[Face Detection Task]
+    CreateHashTask --> HashQueue[Hash Queue]
+    HashQueue --> HashWorker[Hash Worker]
+    HashWorker -->|Success| HashDone[Hash Complete - Status: hashed]
+    HashWorker -->|Error| HashError[Hash Error - Status: failed]
+    HashWorker -->|File Missing| FileMissing[File Missing - Status: missing]
+    
+    HashDone --> CreateParallelTasks
+    
+    CreateParallelTasks --> TransTask[Transcription Task]
+    CreateParallelTasks --> SceneTask[Scene Detection Task]
+    CreateParallelTasks --> ObjTask[Object Detection Task]
+    CreateParallelTasks --> FaceTask[Face Detection Task]
     
     TransTask --> TransQueue[Transcription Queue]
     SceneTask --> SceneQueue[Scene Queue]
@@ -569,8 +598,9 @@ graph TB
     FaceWorker -->|Success| FaceDone[Faces Complete]
     FaceWorker -->|Error| FaceError[Face Error]
     
-    TransDone --> TopicTask[Topic Extraction Task]
-    TransDone --> EmbedTask[Embedding Task]
+    TransDone --> CreateDependentTasks{Transcription Available?}
+    CreateDependentTasks -->|Yes| TopicTask[Topic Extraction Task]
+    CreateDependentTasks -->|Yes| EmbedTask[Embedding Task]
     
     TopicTask --> TopicQueue[Topic Queue]
     EmbedTask --> EmbedQueue[Embedding Queue]
@@ -597,6 +627,9 @@ graph TB
     TopicDone --> CheckAll
     EmbedDone --> CheckAll
     ThumbDone --> CheckAll
+    
+    CheckAll -->|Yes| VideoComplete[Video Status: completed]
+    CheckAll -->|No| WaitForTasks[Continue Processing]
     
     TransError --> CheckAll
     SceneError --> CheckAll
@@ -1603,3 +1636,76 @@ While not part of automated unit/property tests, performance should be validated
 - Test error conditions explicitly
 - Validate UI state changes
 - Ensure tests are deterministic and reproducible
+
+## Video Status State Machine
+
+Videos progress through a clear status lifecycle that determines task readiness and ensures proper processing order:
+
+```mermaid
+stateDiagram-v2
+    [*] --> discovered
+    discovered --> hashed: Hash task completes
+    discovered --> failed: Hash task fails
+    discovered --> missing: File not found
+    
+    hashed --> processing: Parallel tasks start
+    processing --> completed: All tasks complete
+    processing --> failed: Any task fails
+    
+    failed --> hashed: Retry after fixing issue
+    missing --> discovered: File restored
+    completed --> [*]
+```
+
+### Status Definitions
+
+- **`discovered`** - File found during discovery, no hash calculated (`file_hash = null`)
+- **`hashed`** - SHA-256 hash calculated, ready for parallel processing (`file_hash = present`)
+- **`processing`** - One or more processing tasks are running
+- **`completed`** - All processing tasks finished successfully
+- **`failed`** - One or more tasks failed (can be retried)
+- **`missing`** - File no longer exists at stored path
+
+### Task Readiness Logic
+
+```python
+def is_ready_for_hash_task(video: Video) -> bool:
+    """Check if video needs hashing."""
+    return video.status == "discovered" and video.file_hash is None
+
+def is_ready_for_parallel_tasks(video: Video) -> bool:
+    """Check if video is ready for transcription, scene, object, face tasks."""
+    return video.status == "hashed" and video.file_hash is not None
+
+def is_ready_for_dependent_tasks(video: Video) -> bool:
+    """Check if video is ready for topic/embedding tasks."""
+    return video.status in ["processing", "completed"] and has_transcription_data(video)
+```
+
+### Task Type Hierarchy
+
+1. **Hash Task** (Prerequisite)
+   - Must complete before any other processing
+   - Calculates SHA-256 hash for deduplication and integrity
+   - Updates video status from `discovered` → `hashed`
+
+2. **Parallel Tasks** (Independent)
+   - Transcription (CPU-bound)
+   - Scene Detection (CPU-bound)
+   - Object Detection (GPU-bound)
+   - Face Detection (GPU-bound)
+   - Can run simultaneously once hash is complete
+
+3. **Dependent Tasks** (Require Prerequisites)
+   - Topic Extraction (requires transcription)
+   - Embedding Generation (requires transcription)
+   - Thumbnail Generation (requires scene detection)
+
+### Benefits
+
+- **Deduplication**: Hash prevents processing same file multiple times across different paths
+- **Integrity**: Hash validates file hasn't changed since discovery
+- **Clear Prerequisites**: No processing without successful hashing
+- **State Tracking**: Easy to query videos ready for specific task types
+- **Retry Logic**: Failed tasks can be retried without affecting completed tasks
+- **Resource Optimization**: Only process files that are ready and available

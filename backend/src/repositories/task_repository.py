@@ -90,3 +90,23 @@ class SQLAlchemyTaskRepository(TaskRepository):
             completed_at=entity.completed_at,
             error=entity.error,
         )
+
+    def find_by_video_and_type(self, video_id: str, task_type: str) -> list[Task]:
+        """Find tasks by video ID and task type."""
+        entities = (
+            self.session.query(TaskEntity)
+            .filter(TaskEntity.video_id == video_id)
+            .filter(TaskEntity.task_type == task_type)
+            .all()
+        )
+        return [self._to_domain(entity) for entity in entities]
+
+    def find_by_video_and_status(self, video_id: str, status: str) -> list[Task]:
+        """Find tasks by video ID and status."""
+        entities = (
+            self.session.query(TaskEntity)
+            .filter(TaskEntity.video_id == video_id)
+            .filter(TaskEntity.status == status)
+            .all()
+        )
+        return [self._to_domain(entity) for entity in entities]

@@ -1,0 +1,54 @@
+{
+  "name": "content_creator",
+  "description": "Optimized for content creators who need fast transcription and visual features",
+  "workers": {
+    "hash": {
+      "count": 6,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "transcription": {
+      "count": 4,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "scene_detection": {
+      "count": 3,
+      "priority": 2,
+      "resource": "cpu"
+    },
+    "object_detection": {
+      "count": 3,
+      "priority": 2,
+      "resource": "gpu"
+    },
+    "face_detection": {
+      "count": 3,
+      "priority": 2,
+      "resource": "gpu"
+    },
+    "topic_extraction": {
+      "count": 2,
+      "priority": 3,
+      "resource": "cpu"
+    },
+    "embedding_generation": {
+      "count": 3,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "thumbnail_generation": {
+      "count": 2,
+      "priority": 2,
+      "resource": "cpu"
+    }
+  },
+  "task_settings": {
+    "max_concurrent_videos": 8,
+    "frame_sampling_interval": 20,
+    "face_sampling_interval_seconds": 3.0,
+    "transcription_model": "large-v3-turbo",
+    "object_detection_model": "yolov8s.pt",
+    "face_detection_model": "yolov8s-face.pt"
+  }
+}
