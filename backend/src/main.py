@@ -33,101 +33,93 @@ else:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application lifespan events."""
-    # Startup
-    logger.info("FastAPI starting up...")
-    run_migrations()
+    print("🚀 LIFESPAN STARTUP", flush=True)
 
-    # Load initial configuration
+    print("1️⃣ Running migrations...", flush=True)
+    run_migrations()
+    print("✅ Migrations done", flush=True)
+
+    print("2️⃣ Getting DB session...", flush=True)
     session = next(get_db())
+    print("✅ DB session obtained", flush=True)
+
     try:
+        print("3️⃣ Loading config...", flush=True)
         path_repo = SQLAlchemyPathConfigRepository(session)
         path_manager = PathConfigManager(path_repo)
         config_loader = ConfigLoader(path_manager)
-
-        # Use config path from app state if available
         config_path = getattr(app.state, "config_path", None)
-        logger.info(f"Loading config from: {config_path}")
         config_loader.load_initial_config(config_path)
+        print("✅ Config loaded", flush=True)
 
-        # Start worker pool for task processing
-        logger.info("Starting worker pool...")
-        try:
-            from src.repositories.task_repository import SQLAlchemyTaskRepository
-            from src.repositories.video_repository import SqlVideoRepository
-            from src.services.task_orchestrator import TaskOrchestrator
-            from src.services.worker_pool_manager import (
-                WorkerPoolManager,
-            )
+        print("4️⃣ Importing services...", flush=True)
+        from src.repositories.task_repository import SQLAlchemyTaskRepository
+        from src.repositories.video_repository import SqlVideoRepository
+        from src.services.task_orchestration import TaskType
+        from src.services.task_orchestrator import TaskOrchestrator
+        from src.services.worker_pool_manager import (
+            ResourceType,
+            WorkerConfig,
+            WorkerPoolManager,
+        )
 
-            # Initialize repositories and orchestrator
-            video_repo = SqlVideoRepository(session)
-            task_repo = SQLAlchemyTaskRepository(session)
-            orchestrator = TaskOrchestrator(task_repo, video_repo)
+        print("✅ Services imported", flush=True)
 
-            # Auto-discover videos on startup
-            logger.info("Running auto-discovery on startup...")
+        print("5️⃣ Creating repositories...", flush=True)
+        video_repo = SqlVideoRepository(session)
+        task_repo = SQLAlchemyTaskRepository(session)
+        orchestrator = TaskOrchestrator(task_repo, video_repo)
+        print("✅ Repositories created", flush=True)
 
-            path_config_repo = SQLAlchemyPathConfigRepository(session)
-            path_manager = PathConfigManager(path_config_repo)
-            discovery_service = VideoDiscoveryService(video_repo, path_manager)
+        print("6️⃣ Running auto-discovery...", flush=True)
+        discovery_service = VideoDiscoveryService(path_manager, video_repo)
+        discovered_videos = discovery_service.discover_videos()
+        print(f"✅ Discovered {len(discovered_videos)} videos", flush=True)
 
-            discovered_videos = discovery_service.discover_videos()
-            logger.info(f"Auto-discovery found {len(discovered_videos)} videos")
+        print("7️⃣ Creating tasks for discovered videos...", flush=True)
+        tasks_created = orchestrator.process_discovered_videos()
+        print(f"✅ Created {tasks_created} tasks for discovered videos", flush=True)
 
-            # Create and start worker pool manager
-            pool_manager = WorkerPoolManager(orchestrator)
+        print("8️⃣ Creating worker pool manager...", flush=True)
+        pool_manager = WorkerPoolManager(orchestrator)
+        print("✅ Pool manager created", flush=True)
 
-            # Add worker pools for hash and transcription processing
-            from src.services.task_orchestration import TaskType
-            from src.services.worker_pool_manager import ResourceType, WorkerConfig
+        print("9️⃣ Adding hash worker pool...", flush=True)
+        hash_config = WorkerConfig(TaskType.HASH, 2, ResourceType.CPU, 1)
+        pool_manager.add_worker_pool(hash_config)
+        print("✅ Hash pool added", flush=True)
 
-            # Add hash worker pool
-            hash_config = WorkerConfig(
-                task_type=TaskType.HASH,
-                worker_count=2,
-                resource_type=ResourceType.CPU,
-                priority=1,
-            )
-            pool_manager.add_worker_pool(hash_config)
+        print("🔟 Adding transcription worker pool...", flush=True)
+        transcription_config = WorkerConfig(
+            TaskType.TRANSCRIPTION, 1, ResourceType.CPU, 1
+        )
+        pool_manager.add_worker_pool(transcription_config)
+        print("✅ Transcription pool added", flush=True)
 
-            # Add transcription worker pool
-            transcription_config = WorkerConfig(
-                task_type=TaskType.TRANSCRIPTION,
-                worker_count=1,  # CPU intensive, limit to 1
-                resource_type=ResourceType.CPU,
-                priority=1,
-            )
-            pool_manager.add_worker_pool(transcription_config)
+        print("1️⃣1️⃣ Starting all worker pools...", flush=True)
+        pool_manager.start_all()
+        print("✅ Worker pools started", flush=True)
 
-            # Start all worker pools
-            pool_manager.start_all()
+        print("🏁 Storing in app state...", flush=True)
+        app.state.pool_manager = pool_manager
+        app.state.orchestrator = orchestrator
+        print("✅ STARTUP COMPLETE", flush=True)
 
-            # Store in app state for access during runtime
-            app.state.pool_manager = pool_manager
-            app.state.orchestrator = orchestrator
+    except Exception as e:
+        print(f"❌ Error at step: {e}", flush=True)
+        import traceback
 
-            logger.info("Worker pools started successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to start worker pool: {e}")
-            # Don't fail startup if worker pool fails
+        traceback.print_exc()
 
     finally:
         session.close()
 
-    logger.info("FastAPI startup complete")
     yield
-    # Shutdown
-    logger.info("FastAPI shutting down")
 
-    # Stop worker pools if they exist
+    # Shutdown
     if hasattr(app.state, "pool_manager"):
-        try:
-            logger.info("Stopping worker pools...")
-            app.state.pool_manager.stop_all()
-            logger.info("Worker pools stopped successfully")
-        except Exception as e:
-            logger.error(f"Error stopping worker pools: {e}")
+        app.state.pool_manager.stop_all()
+    print("✅ SHUTDOWN COMPLETE", flush=True)
 
 
 def create_app(config_path: str | None = None) -> FastAPI:
