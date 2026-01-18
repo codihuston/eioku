@@ -190,7 +190,7 @@ class TestTaskOrchestrator:
         assert hash_task.is_completed()
 
         # Should update video status to hashed
-        self.video_repo.update.assert_called()
+        self.video_repo.save.assert_called()
 
         # Should create parallel tasks (but video status needs to be
         # updated first) In real scenario, video would be reloaded with
@@ -219,7 +219,7 @@ class TestTaskOrchestrator:
         # Mock repository responses
         self.video_repo.find_by_id.return_value = video
         self.task_repo.update.return_value = hash_task
-        self.video_repo.update.return_value = video
+        self.video_repo.save.return_value = video
 
         # Handle failure
         error_msg = "File not found"
@@ -230,7 +230,7 @@ class TestTaskOrchestrator:
         assert hash_task.error == error_msg
 
         # Should update video status to failed for hash task
-        self.video_repo.update.assert_called()
+        self.video_repo.save.assert_called()
 
     def test_get_next_task(self):
         """Test getting next task from queue."""

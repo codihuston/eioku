@@ -100,3 +100,40 @@ async def delete_video(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Video not found"
         )
+
+
+@router.get("/{video_id}/transcription")
+async def get_video_transcription(video_id: str, session: Session = Depends(get_db)):
+    """Get transcription for a video."""
+    from ..repositories.transcription_repository import SqlTranscriptionRepository
+
+    transcription_repo = SqlTranscriptionRepository(session)
+    segments = transcription_repo.find_by_video_id(video_id)
+
+    if not segments:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcription not found for this video",
+        )
+
+    # Combine segments into full text
+    full_text = " ".join(seg.text for seg in segments)
+
+    # Convert segments to dict format
+    segments_data = [
+        {
+            "start": seg.start,
+            "end": seg.end,
+            "text": seg.text,
+            "confidence": seg.confidence if hasattr(seg, "confidence") else None,
+        }
+        for seg in segments
+    ]
+
+    return {
+        "video_id": video_id,
+        "full_text": full_text,
+        "segments": segments_data,
+        "segment_count": len(segments),
+        "created_at": segments[0].created_at if segments else None,
+    }

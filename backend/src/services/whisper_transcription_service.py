@@ -72,7 +72,7 @@ class WhisperTranscriptionService:
         self,
         model_name: str = "large-v3",
         device: str = "auto",
-        compute_type: str = "float16",
+        compute_type: str = "auto",
     ):
         """Initialize Whisper transcription service.
 
@@ -80,15 +80,53 @@ class WhisperTranscriptionService:
             model_name: Whisper model to use (large-v3, large-v3-turbo,
                        medium, small, base)
             device: Device to use (auto, cpu, cuda)
-            compute_type: Compute precision (float16, float32, int8)
+            compute_type: Compute precision (auto, float16, float32, int8)
+                         'auto' will select the best option for the device
         """
         self.model_name = model_name
         self.device = device
-        self.compute_type = compute_type
+        self.compute_type = self._determine_compute_type(compute_type, device)
         self.model = None
 
         # Load model on first use (lazy loading)
         self._model_loaded = False
+
+    def _determine_compute_type(self, compute_type: str, device: str) -> str:
+        """Determine the best compute type for the device.
+
+        Args:
+            compute_type: Requested compute type or 'auto'
+            device: Target device
+
+        Returns:
+            Appropriate compute type for the device
+        """
+        if compute_type != "auto":
+            return compute_type
+
+        # Auto-detect based on device
+        if device == "cpu" or device == "auto":
+            # CPU doesn't support float16 efficiently, use int8 for speed
+            # or float32 for accuracy
+            selected = "int8"
+            logger.info(
+                f"Auto-selected compute_type='{selected}' for device='{device}'"
+            )
+            return selected
+        elif "cuda" in device.lower():
+            # GPU supports float16 efficiently
+            selected = "float16"
+            logger.info(
+                f"Auto-selected compute_type='{selected}' for device='{device}'"
+            )
+            return selected
+        else:
+            # Default to float32 for unknown devices
+            selected = "float32"
+            logger.info(
+                f"Auto-selected compute_type='{selected}' for device='{device}'"
+            )
+            return selected
 
     def _load_model(self) -> None:
         """Load Whisper model (lazy loading)."""

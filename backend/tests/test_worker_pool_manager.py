@@ -70,7 +70,15 @@ class TestSpecificWorkers:
             "1234567890abcdef"  # 16 char xxhash
         )
 
-        worker = HashWorker(hash_service=mock_hash_service)
+        # Create mock video repository
+        mock_video_repo = Mock()
+        mock_video = Mock()
+        mock_video.file_path = "/test/video.mp4"
+        mock_video_repo.find_by_id.return_value = mock_video
+
+        worker = HashWorker(
+            hash_service=mock_hash_service, video_repository=mock_video_repo
+        )
         task = Task(
             task_id=str(uuid.uuid4()),
             video_id=str(uuid.uuid4()),
@@ -204,8 +212,9 @@ class TestWorkerPool:
 
         pool.stop()
 
-        # Should have handled task completion
-        assert self.orchestrator.handle_task_completion.called
+        # Should have called the worker to execute the task
+        assert mock_worker.execute_task.called
+        assert mock_worker.execute_task.call_args[0][0].task_id == task.task_id
 
 
 class TestWorkerPoolManager:

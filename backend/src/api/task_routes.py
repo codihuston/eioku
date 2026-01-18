@@ -426,3 +426,99 @@ async def get_queue_status() -> dict:
             "face_detection": {"pending": 0, "processing": 0},
         },
     }
+
+
+@router.post("/startup")
+async def startup_worker_pools() -> dict:
+    """Start worker pools and store them globally."""
+    try:
+        from src.database.connection import get_db
+        from src.repositories.task_repository import SQLAlchemyTaskRepository
+        from src.repositories.video_repository import SqlVideoRepository
+        from src.services.task_orchestration import TaskType
+        from src.services.task_orchestrator import TaskOrchestrator
+        from src.services.worker_pool_manager import (
+            ResourceType,
+            WorkerConfig,
+            WorkerPoolManager,
+        )
+
+        session = next(get_db())
+        try:
+            video_repo = SqlVideoRepository(session)
+            task_repo = SQLAlchemyTaskRepository(session)
+            orchestrator = TaskOrchestrator(task_repo, video_repo)
+
+            # Create global worker pool manager
+            global_pool_manager = WorkerPoolManager(orchestrator)
+
+            # Add worker pools
+            hash_config = WorkerConfig(TaskType.HASH, 2, ResourceType.CPU, 1)
+            global_pool_manager.add_worker_pool(hash_config)
+
+            transcription_config = WorkerConfig(
+                TaskType.TRANSCRIPTION, 1, ResourceType.CPU, 1
+            )
+            global_pool_manager.add_worker_pool(transcription_config)
+
+            # Start all worker pools
+            global_pool_manager.start_all()
+
+            # Store globally (simple approach)
+            import src.main as main_module
+
+            main_module.global_pool_manager = global_pool_manager
+
+            return {"status": "success", "message": "Worker pools started successfully"}
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}
+
+
+async def test_worker_pools() -> dict:
+    """Test endpoint to manually start worker pools."""
+    try:
+        print("🧪 Testing worker pools...")
+
+        from src.database.connection import get_db
+        from src.repositories.task_repository import SQLAlchemyTaskRepository
+        from src.repositories.video_repository import SqlVideoRepository
+        from src.services.task_orchestration import TaskType
+        from src.services.task_orchestrator import TaskOrchestrator
+        from src.services.worker_pool_manager import (
+            ResourceType,
+            WorkerConfig,
+            WorkerPoolManager,
+        )
+
+        session = next(get_db())
+        try:
+            video_repo = SqlVideoRepository(session)
+            task_repo = SQLAlchemyTaskRepository(session)
+            orchestrator = TaskOrchestrator(task_repo, video_repo)
+
+            pool_manager = WorkerPoolManager(orchestrator)
+            hash_config = WorkerConfig(TaskType.HASH, 1, ResourceType.CPU, 1)
+            pool_manager.add_worker_pool(hash_config)
+
+            # Actually start the worker pools
+            pool_manager.start_all()
+
+            print("✅ Worker pool started successfully")
+            return {"status": "success", "message": "Worker pools started and running"}
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        print(f"❌ Worker pool test failed: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return {"status": "error", "message": str(e)}

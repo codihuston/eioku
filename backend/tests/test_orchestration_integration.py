@@ -198,7 +198,7 @@ class TestTaskOrchestrationIntegration:
         self.task_repo.save.side_effect = lambda task: task
         self.task_repo.find_by_video_and_type.return_value = []
         self.video_repo.find_by_id.return_value = video
-        self.video_repo.update.return_value = video
+        self.video_repo.save.return_value = video
         self.task_repo.update.return_value = None
 
         # Create and fail a hash task
@@ -214,7 +214,7 @@ class TestTaskOrchestrationIntegration:
         assert hash_task.error == error_msg
 
         # Video status should be updated for critical hash failure
-        self.video_repo.update.assert_called()
+        self.video_repo.save.assert_called()
 
     def test_custom_profile_loading_and_usage(self):
         """Test loading custom profiles and using them with worker manager."""
