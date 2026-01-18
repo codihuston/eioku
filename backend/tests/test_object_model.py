@@ -24,7 +24,7 @@ def test_object_model_creation():
             file_path="/path/to/video.mp4",
             filename="video.mp4",
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
         session.add(video)
         session.commit()
@@ -38,8 +38,8 @@ def test_object_model_creation():
             bounding_boxes=[
                 {"x": 100, "y": 50, "width": 200, "height": 300},
                 {"x": 110, "y": 55, "width": 190, "height": 295},
-                {"x": 105, "y": 52, "width": 195, "height": 298}
-            ]
+                {"x": 105, "y": 52, "width": 195, "height": 298},
+            ],
         )
 
         session.add(obj)

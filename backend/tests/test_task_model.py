@@ -24,7 +24,7 @@ def test_task_model_creation():
             file_path="/path/to/video.mp4",
             filename="video.mp4",
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
         session.add(video)
         session.commit()
@@ -36,7 +36,7 @@ def test_task_model_creation():
             task_type="transcription",
             status="pending",
             priority=1,
-            dependencies=["task-0"]
+            dependencies=["task-0"],
         )
 
         session.add(task)

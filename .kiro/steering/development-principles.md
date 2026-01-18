@@ -33,14 +33,22 @@
 - **Test-driven approach** - Write tests for each incremental change
 - **Continuous validation** - Ensure each step works before proceeding
 
+### Pre-Push Quality Checks
+- **ALWAYS run format and lint checks before pushing**
+- Backend: `cd backend && poetry run ruff format --check src tests && poetry run ruff check src tests`
+- Frontend: `cd frontend && npm run lint`
+- **Run all tests** to ensure nothing is broken
+- **Never push without passing quality checks**
+
 ## Development Loop
 
 1. **Identify** the smallest meaningful change
 2. **Implement** the minimal code needed
 3. **Review** changes with user before commit
-4. **Commit** only after explicit approval
-5. **Validate** the change works as expected
-6. **Iterate** to the next small change
+4. **Run quality checks** - format, lint, test
+5. **Commit** only after explicit approval and passing checks
+6. **Validate** the change works as expected
+7. **Iterate** to the next small change
 
 ### Code Quality Standards
 - Follow [PEP 8](https://peps.python.org/pep-0008/) Python style guide

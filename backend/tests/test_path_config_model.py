@@ -19,9 +19,7 @@ def test_path_config_model_creation():
 
         # Create path configuration
         path_config = PathConfig(
-            path_id="path-1",
-            path="/home/user/videos",
-            recursive="true"
+            path_id="path-1", path="/home/user/videos", recursive="true"
         )
 
         session.add(path_config)

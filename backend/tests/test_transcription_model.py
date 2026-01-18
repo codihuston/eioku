@@ -24,7 +24,7 @@ def test_transcription_model_creation():
             file_path="/path/to/video.mp4",
             filename="video.mp4",
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
         session.add(video)
         session.commit()
@@ -37,7 +37,7 @@ def test_transcription_model_creation():
             start=0.0,
             end=5.2,
             confidence=0.95,
-            speaker="speaker_1"
+            speaker="speaker_1",
         )
 
         session.add(transcription)

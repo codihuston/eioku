@@ -24,7 +24,7 @@ def test_face_model_creation():
             file_path="/path/to/video.mp4",
             filename="video.mp4",
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
         session.add(video)
         session.commit()
@@ -38,9 +38,9 @@ def test_face_model_creation():
             bounding_boxes=[
                 {"x": 150, "y": 80, "width": 120, "height": 150},
                 {"x": 155, "y": 85, "width": 115, "height": 145},
-                {"x": 148, "y": 82, "width": 118, "height": 148}
+                {"x": 148, "y": 82, "width": 118, "height": 148},
             ],
-            confidence=0.92
+            confidence=0.92,
         )
 
         session.add(face)

@@ -26,7 +26,7 @@ def test_video_model_creation():
             duration=120.5,
             file_size=1024000,
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
 
         session.add(video)

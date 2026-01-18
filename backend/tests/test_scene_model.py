@@ -24,7 +24,7 @@ def test_scene_model_creation():
             file_path="/path/to/video.mp4",
             filename="video.mp4",
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
         session.add(video)
         session.commit()
@@ -36,7 +36,7 @@ def test_scene_model_creation():
             scene=1,
             start=0.0,
             end=15.5,
-            thumbnail_path="/path/to/thumbnail.jpg"
+            thumbnail_path="/path/to/thumbnail.jpg",
         )
 
         session.add(scene)

@@ -24,7 +24,7 @@ def test_topic_model_creation():
             file_path="/path/to/video.mp4",
             filename="video.mp4",
             last_modified=datetime.now(),
-            status="pending"
+            status="pending",
         )
         session.add(video)
         session.commit()
@@ -36,7 +36,7 @@ def test_topic_model_creation():
             label="technology",
             keywords=["AI", "machine learning", "software", "development"],
             relevance_score=0.85,
-            timestamps=[10.5, 45.2, 120.8, 180.3]
+            timestamps=[10.5, 45.2, 120.8, 180.3],
         )
 
         session.add(topic)
