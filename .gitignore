@@ -69,4 +69,6 @@ tmp
 *.wmv
 *.m4v
 test-videos/
+
+# YOLO Models
 *.pt

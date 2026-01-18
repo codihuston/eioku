@@ -38,6 +38,7 @@ services:
     volumes:
       - ../backend:/app
       - ../test-videos:/media:ro
+      - backend_models:/app/models
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://eioku:eioku_dev@postgres:5432/eioku
@@ -68,3 +69,4 @@ networks:
 
 volumes:
   postgres_data:
+  backend_models:
