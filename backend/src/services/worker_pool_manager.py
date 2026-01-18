@@ -31,7 +31,7 @@ class WorkerConfig:
     task_type: TaskType
     worker_count: int
     resource_type: ResourceType
-    priority: int = 3  # 1=critical, 2=high, 3=medium, 4=low
+    priority: int
 
 
 class TaskWorker:
@@ -76,33 +76,70 @@ class TaskWorker:
 class HashWorker(TaskWorker):
     """Worker for hash calculation tasks."""
 
-    def __init__(self):
+    def __init__(self, hash_service=None):
         super().__init__(TaskType.HASH)
+        from .file_hash_service import FileHashService
+
+        self.hash_service = hash_service or FileHashService()
 
     def _do_work(self, task: Task) -> str:
         """Calculate file hash."""
-        # TODO: Implement actual hash calculation
-        import hashlib
+        # Get video from task - we need the file path
+        # For now, assume file path can be derived from video_id
+        # In production, this would be injected via video repository
 
-        # Simulate hash calculation
-        time.sleep(0.05)  # Fast operation
-        return hashlib.sha256(f"fake_content_{task.video_id}".encode()).hexdigest()
+        # This is a simplified approach - in production we'd inject video repository
+        file_path = f"/media/{task.video_id}"  # Placeholder path
+
+        try:
+            hash_value = self.hash_service.calculate_hash(file_path)
+            logger.info(f"Calculated hash for {task.video_id}: {hash_value}")
+            return hash_value
+        except Exception as e:
+            logger.error(f"Hash calculation failed for {task.video_id}: {e}")
+            raise
 
 
 class TranscriptionWorker(TaskWorker):
     """Worker for transcription tasks."""
 
-    def __init__(self):
+    def __init__(self, transcription_handler=None):
         super().__init__(TaskType.TRANSCRIPTION)
+        self.transcription_handler = transcription_handler
 
     def _do_work(self, task: Task) -> dict:
-        """Perform transcription."""
-        # TODO: Implement actual transcription with Whisper
-        time.sleep(2.0)  # Simulate longer processing
+        """Perform transcription using Whisper."""
+        if not self.transcription_handler:
+            raise RuntimeError("TranscriptionWorker requires a transcription_handler")
+
+        # Get video from repository (would need to be injected)
+        # For now, create a minimal video object
+        from datetime import datetime
+
+        from ..domain.models import Video
+
+        # Simplified approach - in production, we'd inject the video repository
+        video = Video(
+            video_id=task.video_id,
+            file_path=f"/media/{task.video_id}",  # Placeholder path
+            filename=f"{task.video_id}.mkv",
+            last_modified=datetime.utcnow(),
+        )
+
+        # Process transcription
+        success = self.transcription_handler.process_transcription_task(task, video)
+
+        if not success:
+            raise RuntimeError("Transcription processing failed")
+
+        # Get transcription segments for result
+        segments = self.transcription_handler.get_transcription_segments(task.video_id)
+
         return {
-            "segments": [
-                {"start": 0.0, "end": 5.0, "text": "Sample transcription segment"}
-            ]
+            "segments_count": len(segments),
+            "total_text_length": len(
+                self.transcription_handler.get_transcription_text(task.video_id)
+            ),
         }
 
 

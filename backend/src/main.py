@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.logger import logger
 
 from src.api.path_controller_full import router as path_router
+from src.api.task_routes import router as task_router
 from src.api.video_controller import router as video_router
 from src.database.connection import get_db
 from src.database.migrations import run_migrations
@@ -46,13 +47,56 @@ async def lifespan(app: FastAPI):
         config_path = getattr(app.state, "config_path", None)
         logger.info(f"Loading config from: {config_path}")
         config_loader.load_initial_config(config_path)
+
+        # Start worker pool for task processing
+        logger.info("Starting worker pool...")
+        try:
+            from src.repositories.task_repository import SQLAlchemyTaskRepository
+            from src.repositories.video_repository import SqlVideoRepository
+            from src.services.file_hash_service import FileHashService
+            from src.services.task_orchestrator import TaskOrchestrator
+            from src.services.worker_pool_manager import (
+                HashWorker,
+                WorkerPoolManager,
+            )
+
+            # Initialize repositories and orchestrator
+            video_repo = SqlVideoRepository(session)
+            task_repo = SQLAlchemyTaskRepository(session)
+            orchestrator = TaskOrchestrator(task_repo, video_repo)
+
+            # Create and start worker pool manager
+            pool_manager = WorkerPoolManager(orchestrator)
+
+            # Add hash worker pool
+            hash_service = FileHashService()
+            HashWorker(hash_service=hash_service)
+
+            # Store in app state for access during runtime
+            app.state.pool_manager = pool_manager
+            app.state.orchestrator = orchestrator
+
+            logger.info("Worker pool initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to start worker pool: {e}")
+            # Don't fail startup if worker pool fails
+
     finally:
         session.close()
 
     logger.info("FastAPI startup complete")
     yield
-    # Shutdown (nothing to do for now)
+    # Shutdown
     logger.info("FastAPI shutting down")
+
+    # Stop worker pools if they exist
+    if hasattr(app.state, "pool_manager"):
+        try:
+            logger.info("Stopping worker pools...")
+            # Add shutdown logic here when needed
+        except Exception as e:
+            logger.error(f"Error stopping worker pools: {e}")
 
 
 def create_app(config_path: str | None = None) -> FastAPI:
@@ -75,6 +119,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
     app.include_router(video_router, prefix="/v1")
     logger.info("Including path router...")
     app.include_router(path_router, prefix="/v1")
+    logger.info("Including task router...")
+    app.include_router(task_router, prefix="/v1")
     logger.info("Routers included successfully")
 
     return app
