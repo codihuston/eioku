@@ -1,0 +1,16 @@
+{
+  "paths": [
+    {
+      "path": "~/Videos",
+      "recursive": true
+    },
+    {
+      "path": "/media",
+      "recursive": true
+    },
+    {
+      "path": "/mnt",
+      "recursive": true
+    }
+  ]
+}
