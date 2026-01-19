@@ -15,8 +15,8 @@ def run_migrations():
         # Get database URL from environment or use default
         database_url = os.getenv("DATABASE_URL", "sqlite:///./data/eioku.db")
 
-        # Ensure data directory exists for SQLite
-        if "sqlite" in database_url:
+        # Ensure data directory exists for SQLite only
+        if database_url.startswith("sqlite"):
             db_path = database_url.replace("sqlite:///", "")
             db_dir = os.path.dirname(db_path)
             if db_dir and db_dir != ".":
@@ -29,7 +29,8 @@ def run_migrations():
         alembic_cfg.set_main_option("sqlalchemy.url", database_url)
 
         # Run migrations
-        print("🔧 About to run alembic upgrade...")
+        db_type = "PostgreSQL" if database_url.startswith("postgresql") else "SQLite"
+        print(f"🔧 Running alembic migrations ({db_type})...")
         command.upgrade(alembic_cfg, "head")
         print("🔧 Alembic upgrade completed")
 

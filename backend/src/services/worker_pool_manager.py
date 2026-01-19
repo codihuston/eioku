@@ -324,11 +324,13 @@ class WorkerPool:
             logger.info(f"Worker loop started for {self.config.task_type.value}")
 
         # Create session and repositories for this worker thread
+        # Single session is shared with the worker to reduce connection usage
         session = next(get_db())
         video_repo = SqlVideoRepository(session)
         task_repo = SQLAlchemyTaskRepository(session)
 
-        worker = self.worker_factory()
+        # Pass session to worker factory so it reuses the same connection
+        worker = self.worker_factory(session)
 
         try:
             while self.is_running and not self._stop_event.is_set():
@@ -406,15 +408,17 @@ class WorkerPool:
         finally:
             session.close()
 
-    def _get_worker_factory(self) -> Callable[[], TaskWorker]:
-        """Get worker factory for task type."""
+    def _get_worker_factory(self) -> Callable[..., TaskWorker]:
+        """Get worker factory for task type.
+
+        All factories accept a session parameter to reuse the connection
+        from the worker loop, reducing database connection usage.
+        """
         if self.config.task_type == TaskType.HASH:
-            from ..database.connection import get_db
             from ..repositories.video_repository import SqlVideoRepository
             from .file_hash_service import FileHashService
 
-            def create_hash_worker():
-                session = next(get_db())
+            def create_hash_worker(session):
                 video_repo = SqlVideoRepository(session)
                 hash_service = FileHashService()
                 return HashWorker(
@@ -423,7 +427,6 @@ class WorkerPool:
 
             return create_hash_worker
         elif self.config.task_type == TaskType.TRANSCRIPTION:
-            from ..database.connection import get_db
             from ..repositories.transcription_repository import (
                 SqlTranscriptionRepository,
             )
@@ -433,8 +436,7 @@ class WorkerPool:
             from .whisper_transcription_service import WhisperTranscriptionService
 
             # Create transcription handler with dependencies
-            def create_transcription_worker():
-                session = next(get_db())
+            def create_transcription_worker(session):
                 video_repo = SqlVideoRepository(session)
                 transcription_repo = SqlTranscriptionRepository(session)
                 audio_service = AudioExtractionService()
@@ -451,14 +453,12 @@ class WorkerPool:
 
             return create_transcription_worker
         elif self.config.task_type == TaskType.SCENE_DETECTION:
-            from ..database.connection import get_db
             from ..repositories.scene_repository import SqlSceneRepository
             from ..repositories.video_repository import SqlVideoRepository
             from .scene_detection_service import SceneDetectionService
 
             # Create scene detection worker with dependencies
-            def create_scene_detection_worker():
-                session = next(get_db())
+            def create_scene_detection_worker(session):
                 video_repo = SqlVideoRepository(session)
                 scene_repo = SqlSceneRepository(session)
                 scene_detection_service = SceneDetectionService()
@@ -470,7 +470,6 @@ class WorkerPool:
 
             return create_scene_detection_worker
         elif self.config.task_type == TaskType.OBJECT_DETECTION:
-            from ..database.connection import get_db
             from ..repositories.object_repository import SqlObjectRepository
             from ..repositories.video_repository import SqlVideoRepository
             from .object_detection_service import ObjectDetectionService
@@ -481,8 +480,7 @@ class WorkerPool:
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
 
             # Create object detection worker with dependencies
-            def create_object_detection_worker():
-                session = next(get_db())
+            def create_object_detection_worker(session):
                 video_repo = SqlVideoRepository(session)
                 object_repo = SqlObjectRepository(session)
                 detection_service = ObjectDetectionService(model_name=model_name)
@@ -499,8 +497,13 @@ class WorkerPool:
 
             return create_object_detection_worker
         else:
-            # Generic workers for other task types
-            return TaskWorker
+            # Generic workers for other task types - need to pass task_type
+            task_type = self.config.task_type
+
+            def create_generic_worker(session):
+                return TaskWorker(task_type)
+
+            return create_generic_worker
 
 
 class WorkerPoolManager:
