@@ -236,6 +236,43 @@ class ObjectDetectionWorker(TaskWorker):
         }
 
 
+class FaceDetectionWorker(TaskWorker):
+    """Worker for face detection tasks."""
+
+    def __init__(
+        self,
+        detection_handler,
+        video_repository: "VideoRepository",
+    ):
+        super().__init__(TaskType.FACE_DETECTION)
+        self.detection_handler = detection_handler
+        self.video_repository = video_repository
+
+    def _do_work(self, task: Task) -> dict:
+        """Perform face detection."""
+        # Get video
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise ValueError(f"Video not found: {task.video_id}")
+
+        # Process face detection
+        success = self.detection_handler.process_face_detection_task(task, video)
+
+        if not success:
+            raise Exception("Face detection processing failed")
+
+        # Get detected faces for response
+        faces = self.detection_handler.get_detected_faces(task.video_id)
+
+        # Calculate total face occurrences
+        total_occurrences = sum(face.get_occurrence_count() for face in faces)
+
+        return {
+            "face_groups": len(faces),
+            "total_occurrences": total_occurrences,
+        }
+
+
 class WorkerPool:
     """Manages a pool of workers for a specific task type."""
 
@@ -496,6 +533,35 @@ class WorkerPool:
                 )
 
             return create_object_detection_worker
+        elif self.config.task_type == TaskType.FACE_DETECTION:
+            from ..repositories.face_repository import SQLAlchemyFaceRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from .face_detection_service import FaceDetectionService
+            from .face_detection_task_handler import FaceDetectionTaskHandler
+
+            # Get settings from task_settings
+            model_name = self.task_settings.get(
+                "face_detection_model", "yolov8n-face.pt"
+            )
+            sample_rate = self.task_settings.get("frame_sampling_interval", 30)
+
+            # Create face detection worker with dependencies
+            def create_face_detection_worker(session):
+                video_repo = SqlVideoRepository(session)
+                face_repo = SQLAlchemyFaceRepository(session)
+                detection_service = FaceDetectionService(model_name=model_name)
+                detection_handler = FaceDetectionTaskHandler(
+                    face_repository=face_repo,
+                    detection_service=detection_service,
+                    model_name=model_name,
+                    sample_rate=sample_rate,
+                )
+                return FaceDetectionWorker(
+                    detection_handler=detection_handler,
+                    video_repository=video_repo,
+                )
+
+            return create_face_detection_worker
         else:
             # Generic workers for other task types - need to pass task_type
             task_type = self.config.task_type

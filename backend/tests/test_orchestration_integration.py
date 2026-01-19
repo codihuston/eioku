@@ -198,7 +198,7 @@ class TestTaskOrchestrationIntegration:
         self.task_repo.save.side_effect = lambda task: task
         self.task_repo.find_by_video_and_type.return_value = []
         self.video_repo.find_by_id.return_value = video
-        self.video_repo.save.return_value = video
+        self.video_repo.update.return_value = video
         self.task_repo.update.return_value = None
 
         # Create and fail a hash task

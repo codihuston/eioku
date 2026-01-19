@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..api.schemas import VideoCreateSchema, VideoResponseSchema, VideoUpdateSchema
@@ -230,3 +233,130 @@ async def get_video_objects(
         "total_occurrences": total_occurrences,
         "created_at": objects[0].created_at if objects else None,
     }
+
+
+@router.get("/{video_id}/faces")
+async def get_video_faces(
+    video_id: str, person_id: str = None, session: Session = Depends(get_db)
+):
+    """Get detected faces for a video, optionally filtered by person ID."""
+    from ..repositories.face_repository import SQLAlchemyFaceRepository
+
+    face_repo = SQLAlchemyFaceRepository(session)
+
+    # Filter by person_id if provided
+    if person_id:
+        faces = face_repo.find_by_person_id(video_id, person_id)
+    else:
+        faces = face_repo.find_by_video_id(video_id)
+
+    if not faces:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Faces not found for this video",
+        )
+
+    # Convert faces to dict format
+    faces_data = [
+        {
+            "face_id": face.face_id,
+            "person_id": face.person_id,
+            "occurrences": face.get_occurrence_count(),
+            "first_appearance": face.get_first_appearance(),
+            "last_appearance": face.get_last_appearance(),
+            "confidence": face.confidence,
+            "timestamps": face.timestamps,
+            "bounding_boxes": face.bounding_boxes,
+            "created_at": face.created_at,
+        }
+        for face in faces
+    ]
+
+    # Calculate statistics
+    total_occurrences = sum(face.get_occurrence_count() for face in faces)
+
+    return {
+        "video_id": video_id,
+        "faces": faces_data,
+        "face_groups": len(faces),
+        "total_occurrences": total_occurrences,
+        "created_at": faces[0].created_at if faces else None,
+    }
+
+
+@router.get("/{video_id}/stream")
+async def stream_video(
+    video_id: str,
+    request: Request,
+    service: VideoService = Depends(get_video_service),
+):
+    """Stream video file with range request support."""
+    video = service.get_video(video_id)
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Video not found"
+        )
+
+    video_path = Path(video.file_path)
+    if not video_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Video file not found"
+        )
+
+    file_size = video_path.stat().st_size
+    range_header = request.headers.get("range")
+
+    # Determine content type based on file extension
+    content_type = "video/mp4"
+    if video_path.suffix.lower() in [".webm"]:
+        content_type = "video/webm"
+    elif video_path.suffix.lower() in [".mov"]:
+        content_type = "video/quicktime"
+
+    # Handle range requests for video seeking
+    if range_header:
+        # Parse range header (format: "bytes=start-end")
+        range_match = range_header.replace("bytes=", "").split("-")
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+        end = min(end, file_size - 1)
+        length = end - start + 1
+
+        def iter_file():
+            with open(video_path, "rb") as f:
+                f.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk_size = min(8192, remaining)
+                    data = f.read(chunk_size)
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(length),
+            "Content-Type": content_type,
+        }
+
+        return StreamingResponse(
+            iter_file(), status_code=206, headers=headers, media_type=content_type
+        )
+
+    # No range request - stream entire file
+    def iter_file():
+        with open(video_path, "rb") as f:
+            while chunk := f.read(8192):
+                yield chunk
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+        "Content-Type": content_type,
+    }
+
+    return StreamingResponse(
+        iter_file(), status_code=200, headers=headers, media_type=content_type
+    )
