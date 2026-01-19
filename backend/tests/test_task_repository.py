@@ -179,3 +179,81 @@ def test_task_domain_methods():
     assert simple_task.dependencies == []
     assert simple_task.priority == 1  # default
     assert simple_task.status == "pending"  # default
+
+
+def test_atomic_dequeue_pending_task():
+    """Test atomic task dequeue with SELECT FOR UPDATE."""
+    # Create temporary database
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp_file:
+        db_url = f"sqlite:///{tmp_file.name}"
+
+    engine = create_engine(db_url)
+    Base.metadata.create_all(engine)
+
+    session_local = sessionmaker(bind=engine)
+    session = session_local()
+
+    try:
+        # Create test video
+        video = Video(
+            video_id="video_1",
+            file_path="/test/video.mp4",
+            filename="video.mp4",
+            last_modified=datetime.utcnow(),
+            status="pending",
+        )
+        session.add(video)
+        session.commit()
+
+        repo = SQLAlchemyTaskRepository(session)
+
+        # Create multiple pending tasks with different priorities
+        task1 = Task(
+            task_id="task_1",
+            video_id="video_1",
+            task_type="transcription",
+            status="pending",
+            priority=1,
+        )
+        task2 = Task(
+            task_id="task_2",
+            video_id="video_1",
+            task_type="transcription",
+            status="pending",
+            priority=3,  # Higher priority
+        )
+        task3 = Task(
+            task_id="task_3",
+            video_id="video_1",
+            task_type="transcription",
+            status="running",  # Already running
+            priority=5,
+        )
+
+        repo.save(task1)
+        repo.save(task2)
+        repo.save(task3)
+
+        # Dequeue should get highest priority pending task
+        dequeued = repo.atomic_dequeue_pending_task("transcription")
+        assert dequeued is not None
+        assert dequeued.task_id == "task_2"  # Highest priority pending
+        assert dequeued.status == "running"  # Should be marked as running
+        assert dequeued.started_at is not None
+
+        # Dequeue again should get the next pending task
+        dequeued2 = repo.atomic_dequeue_pending_task("transcription")
+        assert dequeued2 is not None
+        assert dequeued2.task_id == "task_1"
+        assert dequeued2.status == "running"
+
+        # No more pending tasks of this type
+        dequeued3 = repo.atomic_dequeue_pending_task("transcription")
+        assert dequeued3 is None
+
+        # Different task type should return None
+        dequeued4 = repo.atomic_dequeue_pending_task("scene_detection")
+        assert dequeued4 is None
+
+    finally:
+        session.close()

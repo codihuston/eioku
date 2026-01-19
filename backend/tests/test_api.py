@@ -221,3 +221,80 @@ def test_invalid_json_validation(client):
     error_data = response.json()
     assert "detail" in error_data
     assert isinstance(error_data["detail"], list)
+
+
+def test_get_video_scenes(client):
+    """Test getting scenes for a video."""
+    from src.database.models import Scene
+
+    # Create video first
+    video_data = {
+        "video_id": "test-video-scenes",
+        "file_path": "/test/scenes.mp4",
+        "filename": "scenes.mp4",
+        "last_modified": "2024-01-01T12:00:00",
+    }
+    client.post("/v1/videos/", json=video_data)
+
+    # Add some scenes directly to the database
+    from src.database.connection import get_db
+
+    db = next(app.dependency_overrides[get_db]())
+    
+    scenes = [
+        Scene(
+            scene_id="scene_1",
+            video_id="test-video-scenes",
+            scene=1,
+            start=0.0,
+            end=5.5,
+            thumbnail_path="/thumbnails/scene_1.jpg",
+        ),
+        Scene(
+            scene_id="scene_2",
+            video_id="test-video-scenes",
+            scene=2,
+            start=5.5,
+            end=12.3,
+            thumbnail_path="/thumbnails/scene_2.jpg",
+        ),
+    ]
+    
+    for scene in scenes:
+        db.add(scene)
+    db.commit()
+    db.close()
+
+    # Get scenes
+    response = client.get("/v1/videos/test-video-scenes/scenes")
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["video_id"] == "test-video-scenes"
+    assert data["scene_count"] == 2
+    assert len(data["scenes"]) == 2
+    assert data["scenes"][0]["scene"] == 1
+    assert data["scenes"][0]["start"] == 0.0
+    assert data["scenes"][0]["end"] == 5.5
+    assert data["scenes"][0]["duration"] == 5.5
+    assert data["total_duration"] == 12.3
+    assert data["avg_scene_length"] > 0
+    assert data["min_scene_length"] > 0
+    assert data["max_scene_length"] > 0
+
+
+def test_get_video_scenes_not_found(client):
+    """Test getting scenes for video with no scenes returns 404."""
+    # Create video without scenes
+    video_data = {
+        "video_id": "test-video-no-scenes",
+        "file_path": "/test/no-scenes.mp4",
+        "filename": "no-scenes.mp4",
+        "last_modified": "2024-01-01T12:00:00",
+    }
+    client.post("/v1/videos/", json=video_data)
+
+    # Try to get scenes
+    response = client.get("/v1/videos/test-video-no-scenes/scenes")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
