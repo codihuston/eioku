@@ -1,14 +1,14 @@
 """Video file discovery service."""
 
-import logging
 from pathlib import Path
 
 from ..domain.models import PathConfig, Video
 from ..repositories.interfaces import VideoRepository
+from ..utils.print_logger import get_logger
 from .path_config_manager import PathConfigManager
 
 # Configure logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class VideoDiscoveryService:
@@ -46,19 +46,17 @@ class VideoDiscoveryService:
         path = Path(path_config.path)
 
         if not path.exists():
+            logger.warning(f"Path does not exist: {path}")
             return videos
 
-        if path_config.recursive:
-            # Recursive scan
-            for video_file in path.rglob("*"):
-                if self._is_video_file(video_file):
-                    video = self._create_video_from_file(video_file)
-                    if video:
-                        videos.append(video)
-        else:
-            # Non-recursive scan
-            for video_file in path.iterdir():
-                if video_file.is_file() and self._is_video_file(video_file):
+        # Use glob patterns for each supported format (much more efficient)
+        for extension in self.SUPPORTED_FORMATS:
+            pattern = f"**/*{extension}" if path_config.recursive else f"*{extension}"
+            logger.debug(f"Scanning with pattern: {pattern}")
+
+            glob_method = path.rglob if path_config.recursive else path.glob
+            for video_file in glob_method(f"*{extension}"):
+                if video_file.is_file():
                     video = self._create_video_from_file(video_file)
                     if video:
                         videos.append(video)
