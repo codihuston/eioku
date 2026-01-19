@@ -79,9 +79,11 @@ class SqlTranscriptionRepository(TranscriptionRepository):
             segment_id=domain.segment_id,
             video_id=domain.video_id,
             text=domain.text,
-            start=domain.start,
-            end=domain.end,
-            confidence=domain.confidence,
+            start=float(domain.start),  # Convert numpy float to Python float
+            end=float(domain.end),  # Convert numpy float to Python float
+            confidence=float(domain.confidence)
+            if domain.confidence is not None
+            else None,
             speaker=domain.speaker,
         )
 
