@@ -181,3 +181,52 @@ async def get_video_scenes(video_id: str, session: Session = Depends(get_db)):
         "max_scene_length": max(durations) if durations else 0.0,
         "created_at": scenes[0].created_at if scenes else None,
     }
+
+
+@router.get("/{video_id}/objects")
+async def get_video_objects(
+    video_id: str, label: str = None, session: Session = Depends(get_db)
+):
+    """Get detected objects for a video, optionally filtered by label."""
+    from ..repositories.object_repository import SqlObjectRepository
+
+    object_repo = SqlObjectRepository(session)
+
+    # Filter by label if provided
+    if label:
+        objects = object_repo.find_by_label(video_id, label)
+    else:
+        objects = object_repo.find_by_video_id(video_id)
+
+    if not objects:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Objects not found for this video",
+        )
+
+    # Convert objects to dict format
+    objects_data = [
+        {
+            "object_id": obj.object_id,
+            "label": obj.label,
+            "occurrences": obj.get_occurrence_count(),
+            "first_appearance": obj.get_first_appearance(),
+            "last_appearance": obj.get_last_appearance(),
+            "timestamps": obj.timestamps,
+            "bounding_boxes": obj.bounding_boxes,
+            "created_at": obj.created_at,
+        }
+        for obj in objects
+    ]
+
+    # Calculate statistics
+    total_occurrences = sum(obj.get_occurrence_count() for obj in objects)
+    unique_labels = len(set(obj.label for obj in objects))
+
+    return {
+        "video_id": video_id,
+        "objects": objects_data,
+        "unique_labels": unique_labels,
+        "total_occurrences": total_occurrences,
+        "created_at": objects[0].created_at if objects else None,
+    }

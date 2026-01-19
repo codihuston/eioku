@@ -62,8 +62,6 @@ async def lifespan(app: FastAPI):
         from src.services.task_orchestration import TaskType
         from src.services.task_orchestrator import TaskOrchestrator
         from src.services.worker_pool_manager import (
-            ResourceType,
-            WorkerConfig,
             WorkerPoolManager,
         )
 
@@ -93,30 +91,33 @@ async def lifespan(app: FastAPI):
             orchestrator.task_queues.enqueue(task, priority)
         logger.info(f"✅ Loaded {len(pending_tasks)} pending tasks into queues")
 
-        logger.info("9️⃣ Creating worker pool manager...")
-        pool_manager = WorkerPoolManager(orchestrator)
+        logger.info("9️⃣ Loading processing profile...")
+        from dataclasses import asdict
+
+        from src.services.processing_profiles import ProfileManager
+
+        profile_manager = ProfileManager()
+        # Use balanced profile by default (can be made configurable later)
+        profile = profile_manager.get_profile("balanced")
+        task_settings_dict = asdict(profile.task_settings)
+        logger.info(f"✅ Loaded profile: {profile.name}")
+        logger.info(f"   - Model: {profile.task_settings.object_detection_model}")
+        logger.info(
+            f"   - Sample rate: {profile.task_settings.frame_sampling_interval}"
+        )
+
+        logger.info("🔟 Creating worker pool manager...")
+        pool_manager = WorkerPoolManager(orchestrator, task_settings_dict)
         logger.info("✅ Pool manager created")
 
-        logger.info("🔟 Adding hash worker pool...")
-        hash_config = WorkerConfig(TaskType.HASH, 2, ResourceType.CPU, 1)
-        pool_manager.add_worker_pool(hash_config)
-        logger.info("✅ Hash pool added")
+        logger.info("1️⃣1️⃣ Adding worker pools from profile...")
+        for task_type_str, worker_config in profile.worker_configs.items():
+            pool_manager.add_worker_pool(worker_config)
+            logger.info(
+                f"✅ Added {task_type_str} pool: {worker_config.worker_count} workers"
+            )
 
-        logger.info("1️⃣1️⃣ Adding transcription worker pool...")
-        transcription_config = WorkerConfig(
-            TaskType.TRANSCRIPTION, 1, ResourceType.CPU, 1
-        )
-        pool_manager.add_worker_pool(transcription_config)
-        logger.info("✅ Transcription pool added")
-
-        logger.info("1️⃣2️⃣ Adding scene detection worker pool...")
-        scene_detection_config = WorkerConfig(
-            TaskType.SCENE_DETECTION, 1, ResourceType.CPU, 1
-        )
-        pool_manager.add_worker_pool(scene_detection_config)
-        logger.info("✅ Scene detection pool added")
-
-        logger.info("1️⃣3️⃣ Starting all worker pools...")
+        logger.info("1️⃣2️⃣ Starting all worker pools...")
         pool_manager.start_all()
         logger.info("✅ Worker pools started")
 

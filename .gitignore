@@ -69,3 +69,4 @@ tmp
 *.wmv
 *.m4v
 test-videos/
+*.pt

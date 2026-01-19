@@ -6,12 +6,16 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..domain.models import Task
 from ..utils.print_logger import get_logger
 from .task_orchestration import TaskType
 from .task_orchestrator import TaskOrchestrator
+
+if TYPE_CHECKING:
+    from ..repositories.video_repository import SqlVideoRepository as VideoRepository
+    from .object_detection_task_handler import ObjectDetectionTaskHandler
 
 logger = get_logger(__name__)
 
@@ -201,26 +205,49 @@ class SceneDetectionWorker(TaskWorker):
 class ObjectDetectionWorker(TaskWorker):
     """Worker for object detection tasks."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        detection_handler: "ObjectDetectionTaskHandler",
+        video_repository: "VideoRepository",
+    ):
         super().__init__(TaskType.OBJECT_DETECTION)
+        self.detection_handler = detection_handler
+        self.video_repository = video_repository
 
     def _do_work(self, task: Task) -> dict:
         """Perform object detection."""
-        # TODO: Implement actual object detection with YOLO
-        time.sleep(1.5)  # Simulate GPU processing
+        # Get video
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise ValueError(f"Video not found: {task.video_id}")
+
+        # Process object detection
+        success = self.detection_handler.process_object_detection_task(task, video)
+
+        if not success:
+            raise Exception("Object detection processing failed")
+
+        # Get detected objects for response
+        objects = self.detection_handler.get_detected_objects(task.video_id)
+
         return {
-            "objects": [
-                {"label": "person", "confidence": 0.95, "timestamps": [1.0, 2.0]}
-            ]
+            "objects_detected": len(objects),
+            "unique_labels": len(set(obj.label for obj in objects)),
         }
 
 
 class WorkerPool:
     """Manages a pool of workers for a specific task type."""
 
-    def __init__(self, config: WorkerConfig, orchestrator: TaskOrchestrator):
+    def __init__(
+        self,
+        config: WorkerConfig,
+        orchestrator: TaskOrchestrator,
+        task_settings: dict | None = None,
+    ):
         self.config = config
         self.orchestrator = orchestrator
+        self.task_settings = task_settings or {}
         self.is_running = False
         self.workers = []
         self.executor = None
@@ -442,6 +469,35 @@ class WorkerPool:
                 )
 
             return create_scene_detection_worker
+        elif self.config.task_type == TaskType.OBJECT_DETECTION:
+            from ..database.connection import get_db
+            from ..repositories.object_repository import SqlObjectRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from .object_detection_service import ObjectDetectionService
+            from .object_detection_task_handler import ObjectDetectionTaskHandler
+
+            # Get settings from task_settings
+            model_name = self.task_settings.get("object_detection_model", "yolov8n.pt")
+            sample_rate = self.task_settings.get("frame_sampling_interval", 30)
+
+            # Create object detection worker with dependencies
+            def create_object_detection_worker():
+                session = next(get_db())
+                video_repo = SqlVideoRepository(session)
+                object_repo = SqlObjectRepository(session)
+                detection_service = ObjectDetectionService(model_name=model_name)
+                detection_handler = ObjectDetectionTaskHandler(
+                    object_repository=object_repo,
+                    detection_service=detection_service,
+                    model_name=model_name,
+                    sample_rate=sample_rate,
+                )
+                return ObjectDetectionWorker(
+                    detection_handler=detection_handler,
+                    video_repository=video_repo,
+                )
+
+            return create_object_detection_worker
         else:
             # Generic workers for other task types
             return TaskWorker
@@ -450,8 +506,11 @@ class WorkerPool:
 class WorkerPoolManager:
     """Manages multiple worker pools."""
 
-    def __init__(self, orchestrator: TaskOrchestrator):
+    def __init__(
+        self, orchestrator: TaskOrchestrator, task_settings: dict | None = None
+    ):
         self.orchestrator = orchestrator
+        self.task_settings = task_settings or {}
         self.pools: dict[TaskType, WorkerPool] = {}
         self.is_running = False
 
@@ -460,7 +519,7 @@ class WorkerPoolManager:
         if config.task_type in self.pools:
             raise ValueError(f"Worker pool for {config.task_type.value} already exists")
 
-        pool = WorkerPool(config, self.orchestrator)
+        pool = WorkerPool(config, self.orchestrator, self.task_settings)
         self.pools[config.task_type] = pool
 
         # Start pool if manager is running

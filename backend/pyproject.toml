@@ -17,6 +17,8 @@ gunicorn = "^23.0.0"
 faster-whisper = "^1.2.1"
 openai-whisper = "^20250625"
 xxhash = "^3.6.0"
+ultralytics = "^8.0.0"
+av = "^13.0.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"
