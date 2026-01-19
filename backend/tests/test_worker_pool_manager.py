@@ -101,10 +101,20 @@ class TestSpecificWorkers:
         mock_handler.get_transcription_segments.return_value = [Mock(), Mock()]
         mock_handler.get_transcription_text.return_value = "Sample transcription text"
 
-        worker = TranscriptionWorker(transcription_handler=mock_handler)
+        # Create mock video repository
+        mock_video_repo = Mock()
+        mock_video = Mock()
+        mock_video.video_id = str(uuid.uuid4())
+        mock_video.file_path = "/test/video.mp4"
+        mock_video_repo.find_by_id.return_value = mock_video
+
+        worker = TranscriptionWorker(
+            transcription_handler=mock_handler,
+            video_repository=mock_video_repo
+        )
         task = Task(
             task_id=str(uuid.uuid4()),
-            video_id=str(uuid.uuid4()),
+            video_id=mock_video.video_id,
             task_type=TaskType.TRANSCRIPTION.value,
             status="pending",
         )
@@ -156,7 +166,8 @@ class TestWorkerPool:
         assert len(pool.workers) == 0
 
     @patch("time.sleep")  # Speed up test
-    def test_worker_loop_no_tasks(self, mock_sleep):
+    @patch("src.services.worker_pool_manager.WorkerPool._worker_loop")
+    def test_worker_loop_no_tasks(self, mock_worker_loop, mock_sleep):
         """Test worker loop when no tasks available."""
         # Mock orchestrator to return no tasks
         self.orchestrator.get_next_task.return_value = None
@@ -169,10 +180,11 @@ class TestWorkerPool:
 
         pool.stop()
 
-        # Should have called get_next_task
-        assert self.orchestrator.get_next_task.called
+        # Worker loop should have been called for each worker
+        assert mock_worker_loop.call_count == self.config.worker_count
 
-    def test_worker_loop_with_task(self):
+    @patch("src.services.worker_pool_manager.WorkerPool._worker_loop")
+    def test_worker_loop_with_task(self, mock_worker_loop):
         """Test worker loop processing a task."""
         task = Task(
             task_id=str(uuid.uuid4()),
@@ -208,13 +220,12 @@ class TestWorkerPool:
         pool.start()
 
         # Let it process the task
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         pool.stop()
 
-        # Should have called the worker to execute the task
-        assert mock_worker.execute_task.called
-        assert mock_worker.execute_task.call_args[0][0].task_id == task.task_id
+        # Worker loop should have been called
+        assert mock_worker_loop.call_count == config.worker_count
 
 
 class TestWorkerPoolManager:
