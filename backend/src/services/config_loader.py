@@ -21,16 +21,26 @@ class ConfigLoader:
     def _load_config_file(self, config_path: str | None = None) -> dict:
         """Load configuration from JSON file."""
         if config_path is None:
-            config_path = os.getenv("EIOKU_CONFIG_PATH", "/etc/eioku/config.json")
+            # Try multiple locations in order
+            possible_paths = [
+                os.getenv("EIOKU_CONFIG_PATH"),
+                str(Path.home() / ".eioku" / "config.json"),
+                "/etc/eioku/config.json",
+            ]
 
-        config_file = Path(config_path)
+            for path in possible_paths:
+                if path and Path(path).exists():
+                    config_path = path
+                    break
 
-        if config_file.exists():
-            try:
-                with open(config_file) as f:
-                    return json.load(f)
-            except (OSError, json.JSONDecodeError):
-                pass
+        if config_path:
+            config_file = Path(config_path)
+            if config_file.exists():
+                try:
+                    with open(config_file) as f:
+                        return json.load(f)
+                except (OSError, json.JSONDecodeError):
+                    pass
 
         # Return default configuration
         return self._get_default_config()
