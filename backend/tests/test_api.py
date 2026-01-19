@@ -10,7 +10,7 @@ from src.database.connection import Base
 from src.main import app
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def test_db():
     """Create a temporary database for testing."""
     # Create temporary database file
@@ -30,7 +30,7 @@ def test_db():
     os.unlink(db_path)
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def client(test_db):
     """Create test client with database dependency override."""
 
@@ -240,7 +240,7 @@ def test_get_video_scenes(client):
     from src.database.connection import get_db
 
     db = next(app.dependency_overrides[get_db]())
-    
+
     scenes = [
         Scene(
             scene_id="scene_1",
@@ -259,7 +259,7 @@ def test_get_video_scenes(client):
             thumbnail_path="/thumbnails/scene_2.jpg",
         ),
     ]
-    
+
     for scene in scenes:
         db.add(scene)
     db.commit()

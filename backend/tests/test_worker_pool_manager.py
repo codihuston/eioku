@@ -109,8 +109,7 @@ class TestSpecificWorkers:
         mock_video_repo.find_by_id.return_value = mock_video
 
         worker = TranscriptionWorker(
-            transcription_handler=mock_handler,
-            video_repository=mock_video_repo
+            transcription_handler=mock_handler, video_repository=mock_video_repo
         )
         task = Task(
             task_id=str(uuid.uuid4()),
