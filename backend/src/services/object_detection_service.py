@@ -3,7 +3,7 @@
 import uuid
 from pathlib import Path
 
-import cv2
+import av
 
 from ..domain.models import Object
 from ..utils.print_logger import get_logger
@@ -66,11 +66,19 @@ class ObjectDetectionService:
         logger.info(f"Starting object detection for video: {video_path}")
         logger.info(f"Sample rate: every {sample_rate} frames")
 
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            raise ObjectDetectionError(f"Failed to open video: {video_path}")
+        try:
+            container = av.open(video_path)
+        except av.AVError as e:
+            raise ObjectDetectionError(f"Failed to open video: {e}") from e
 
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        video_stream = container.streams.video[0]
+        fps = float(video_stream.average_rate)
+
+        logger.info(
+            f"Video info: {video_stream.codec_context.name} codec, "
+            f"{fps:.2f} fps, {video_stream.frames} frames"
+        )
+
         frame_idx = 0
         processed_frames = 0
 
@@ -79,17 +87,14 @@ class ObjectDetectionService:
         detections_by_label = {}
 
         try:
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
+            for frame in container.decode(video=0):
                 # Sample frames based on sample_rate
                 if frame_idx % sample_rate == 0:
+                    # Convert PyAV frame to numpy array (RGB format)
+                    img = frame.to_ndarray(format="rgb24")
+
                     timestamp = frame_idx / fps if fps > 0 else frame_idx
-                    self._process_frame(
-                        frame, timestamp, detections_by_label, frame_idx
-                    )
+                    self._process_frame(img, timestamp, detections_by_label, frame_idx)
                     processed_frames += 1
 
                     if processed_frames % 100 == 0:
@@ -101,7 +106,7 @@ class ObjectDetectionService:
                 frame_idx += 1
 
         finally:
-            cap.release()
+            container.close()
 
         logger.info(
             f"Object detection complete. Processed {processed_frames} frames, "
