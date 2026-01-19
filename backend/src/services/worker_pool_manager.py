@@ -1,6 +1,5 @@
 """Worker pool management for video processing tasks."""
 
-import logging
 import threading
 import time
 from collections.abc import Callable
@@ -10,10 +9,11 @@ from enum import Enum
 from typing import Any
 
 from ..domain.models import Task
+from ..utils.print_logger import get_logger
 from .task_orchestration import TaskType
 from .task_orchestrator import TaskOrchestrator
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ResourceType(Enum):
@@ -39,15 +39,14 @@ class TaskWorker:
 
     def __init__(self, task_type: TaskType):
         self.task_type = task_type
-        self.logger = logging.getLogger(f"worker.{task_type.value}")
+        self.logger = get_logger(f"worker.{task_type.value}")
 
     def execute_task(self, task: Task) -> dict:
         """Execute a task and return result."""
         self.logger.info(f"Starting {self.task_type.value} task {task.task_id}")
 
         try:
-            # Mark task as running
-            task.start()
+            # Task is already marked as running by atomic dequeue
 
             # Execute the actual work
             result = self._do_work(task)
@@ -110,28 +109,23 @@ class HashWorker(TaskWorker):
 class TranscriptionWorker(TaskWorker):
     """Worker for transcription tasks."""
 
-    def __init__(self, transcription_handler=None):
+    def __init__(self, transcription_handler=None, video_repository=None):
         super().__init__(TaskType.TRANSCRIPTION)
         self.transcription_handler = transcription_handler
+        self.video_repository = video_repository
 
     def _do_work(self, task: Task) -> dict:
         """Perform transcription using Whisper."""
         if not self.transcription_handler:
             raise RuntimeError("TranscriptionWorker requires a transcription_handler")
 
-        # Get video from repository (would need to be injected)
-        # For now, create a minimal video object
-        from datetime import datetime
+        if not self.video_repository:
+            raise RuntimeError("TranscriptionWorker requires a video_repository")
 
-        from ..domain.models import Video
-
-        # Simplified approach - in production, we'd inject the video repository
-        video = Video(
-            video_id=task.video_id,
-            file_path=f"/media/{task.video_id}",  # Placeholder path
-            filename=f"{task.video_id}.mkv",
-            last_modified=datetime.utcnow(),
-        )
+        # Get video from repository
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise RuntimeError(f"Video not found: {task.video_id}")
 
         # Process transcription
         success = self.transcription_handler.process_transcription_task(task, video)
@@ -153,14 +147,55 @@ class TranscriptionWorker(TaskWorker):
 class SceneDetectionWorker(TaskWorker):
     """Worker for scene detection tasks."""
 
-    def __init__(self):
+    def __init__(
+        self, scene_detection_service=None, video_repository=None, scene_repository=None
+    ):
         super().__init__(TaskType.SCENE_DETECTION)
+        self.scene_detection_service = scene_detection_service
+        self.video_repository = video_repository
+        self.scene_repository = scene_repository
 
     def _do_work(self, task: Task) -> dict:
         """Perform scene detection."""
-        # TODO: Implement actual scene detection
-        time.sleep(1.0)  # Simulate processing
-        return {"scenes": [{"start": 0.0, "end": 10.0, "scene_id": 1}]}
+        logger.info(f"Scene detection worker starting for task {task.task_id}")
+
+        if not self.scene_detection_service:
+            raise RuntimeError(
+                "SceneDetectionWorker requires a scene_detection_service"
+            )
+
+        if not self.video_repository:
+            raise RuntimeError("SceneDetectionWorker requires a video_repository")
+
+        if not self.scene_repository:
+            raise RuntimeError("SceneDetectionWorker requires a scene_repository")
+
+        # Get video from repository
+        logger.debug(f"Fetching video {task.video_id} from repository")
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise RuntimeError(f"Video not found: {task.video_id}")
+
+        logger.info(f"Detecting scenes in {video.file_path}")
+        # Detect scenes
+        scenes = self.scene_detection_service.detect_scenes(
+            video.file_path, video.video_id
+        )
+
+        logger.info(f"Storing {len(scenes)} scenes in database")
+        # Store scenes in database
+        for scene in scenes:
+            self.scene_repository.save(scene)
+
+        # Get scene statistics
+        scene_info = self.scene_detection_service.get_scene_info(scenes)
+
+        logger.info(
+            f"Detected and stored {scene_info['scene_count']} scenes "
+            f"for video {task.video_id}"
+        )
+
+        return scene_info
 
 
 class ObjectDetectionWorker(TaskWorker):
@@ -205,11 +240,17 @@ class WorkerPool:
         # Use thread pool for all tasks to avoid pickling issues with database sessions
         self.executor = ThreadPoolExecutor(max_workers=self.config.worker_count)
 
-        # Start worker threads
+        # Start worker threads with jitter to prevent simultaneous polling
+        import random
+
         for i in range(self.config.worker_count):
+            # Add random jitter (0-5 seconds) to stagger worker startup
+            jitter = random.uniform(0, 5)
+
             worker_thread = threading.Thread(
                 target=self._worker_loop,
                 name=f"{self.config.task_type.value}-worker-{i}",
+                args=(jitter,),
                 daemon=True,
             )
             worker_thread.start()
@@ -239,11 +280,21 @@ class WorkerPool:
         self.workers.clear()
         logger.info(f"Stopped worker pool for {self.config.task_type.value}")
 
-    def _worker_loop(self) -> None:
+    def _worker_loop(self, initial_jitter: float = 0) -> None:
         """Main loop for worker threads."""
         from ..database.connection import get_db
         from ..repositories.task_repository import SQLAlchemyTaskRepository
         from ..repositories.video_repository import SqlVideoRepository
+
+        # Apply initial jitter to stagger worker startup
+        if initial_jitter > 0:
+            time.sleep(initial_jitter)
+            logger.info(
+                f"Worker loop started for {self.config.task_type.value} "
+                f"(jitter: {initial_jitter:.2f}s)"
+            )
+        else:
+            logger.info(f"Worker loop started for {self.config.task_type.value}")
 
         # Create session and repositories for this worker thread
         session = next(get_db())
@@ -255,14 +306,22 @@ class WorkerPool:
         try:
             while self.is_running and not self._stop_event.is_set():
                 try:
-                    # Get next task from orchestrator
-                    task = self.orchestrator.get_next_task(self.config.task_type)
+                    # Get next task from database atomically
+                    logger.debug(f"Checking for {self.config.task_type.value} tasks...")
+
+                    # Use atomic dequeue to prevent race conditions
+                    task = task_repo.atomic_dequeue_pending_task(
+                        self.config.task_type.value
+                    )
 
                     if task is None:
                         # No tasks available, wait a bit
-                        time.sleep(0.1)
+                        time.sleep(30.0)
                         continue
 
+                    logger.info(
+                        f"Found task {task.task_id} for {self.config.task_type.value}"
+                    )
                     # Submit task to executor
                     future = self.executor.submit(worker.execute_task, task)
 
@@ -281,8 +340,22 @@ class WorkerPool:
                                 if video:
                                     video.status = "hashed"
                                     video_repo.save(video)
-                                    vid_id = task.video_id
-                                    logger.info(f"Updated video {vid_id} to hashed")
+                                    logger.info(
+                                        f"Updated video {task.video_id} to hashed"
+                                    )
+
+                                    # Create next tasks for the video using orchestrator
+                                    new_tasks = (
+                                        self.orchestrator.create_tasks_for_video(video)
+                                    )
+                                    if new_tasks:
+                                        logger.info(
+                                            f"Created {len(new_tasks)} new tasks"
+                                        )
+                                        for new_task in new_tasks:
+                                            logger.info(
+                                                f"   - {new_task.task_type} task"
+                                            )
 
                             task_type = self.config.task_type.value
                             logger.info(f"Completed {task_type} task {task.task_id}")
@@ -327,6 +400,7 @@ class WorkerPool:
             from ..repositories.transcription_repository import (
                 SqlTranscriptionRepository,
             )
+            from ..repositories.video_repository import SqlVideoRepository
             from .audio_extraction_service import AudioExtractionService
             from .transcription_task_handler import TranscriptionTaskHandler
             from .whisper_transcription_service import WhisperTranscriptionService
@@ -334,6 +408,7 @@ class WorkerPool:
             # Create transcription handler with dependencies
             def create_transcription_worker():
                 session = next(get_db())
+                video_repo = SqlVideoRepository(session)
                 transcription_repo = SqlTranscriptionRepository(session)
                 audio_service = AudioExtractionService()
                 whisper_service = WhisperTranscriptionService()
@@ -342,9 +417,31 @@ class WorkerPool:
                     audio_service=audio_service,
                     whisper_service=whisper_service,
                 )
-                return TranscriptionWorker(transcription_handler=transcription_handler)
+                return TranscriptionWorker(
+                    transcription_handler=transcription_handler,
+                    video_repository=video_repo,
+                )
 
             return create_transcription_worker
+        elif self.config.task_type == TaskType.SCENE_DETECTION:
+            from ..database.connection import get_db
+            from ..repositories.scene_repository import SqlSceneRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from .scene_detection_service import SceneDetectionService
+
+            # Create scene detection worker with dependencies
+            def create_scene_detection_worker():
+                session = next(get_db())
+                video_repo = SqlVideoRepository(session)
+                scene_repo = SqlSceneRepository(session)
+                scene_detection_service = SceneDetectionService()
+                return SceneDetectionWorker(
+                    scene_detection_service=scene_detection_service,
+                    video_repository=video_repo,
+                    scene_repository=scene_repo,
+                )
+
+            return create_scene_detection_worker
         else:
             # Generic workers for other task types
             return TaskWorker
