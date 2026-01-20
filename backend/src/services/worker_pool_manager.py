@@ -273,6 +273,43 @@ class FaceDetectionWorker(TaskWorker):
         }
 
 
+class PlacesDetectionWorker(TaskWorker):
+    """Worker for places detection tasks."""
+
+    def __init__(
+        self,
+        detection_handler,
+        video_repository: "VideoRepository",
+    ):
+        super().__init__(TaskType.PLACES_DETECTION)
+        self.detection_handler = detection_handler
+        self.video_repository = video_repository
+
+    def _do_work(self, task: Task) -> dict:
+        """Perform places detection."""
+        # Get video
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise ValueError(f"Video not found: {task.video_id}")
+
+        # Process places detection
+        success = self.detection_handler.process_places_detection_task(task, video)
+
+        if not success:
+            raise Exception("Places detection processing failed")
+
+        # Get detected places for response
+        places = self.detection_handler.get_detected_places(task.video_id)
+
+        # Calculate total place occurrences
+        total_occurrences = sum(place.get_occurrence_count() for place in places)
+
+        return {
+            "place_types": len(places),
+            "total_occurrences": total_occurrences,
+        }
+
+
 class WorkerPool:
     """Manages a pool of workers for a specific task type."""
 
@@ -562,6 +599,37 @@ class WorkerPool:
                 )
 
             return create_face_detection_worker
+        elif self.config.task_type == TaskType.PLACES_DETECTION:
+            from ..repositories.place_repository import SqlPlaceRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from .places_detection_service import PlacesDetectionService
+            from .places_detection_task_handler import PlacesDetectionTaskHandler
+
+            # Get settings from task_settings
+            model_path = self.task_settings.get(
+                "places_detection_model", "models/resnet18_places365.pth.tar"
+            )
+            sample_rate = self.task_settings.get("frame_sampling_interval", 30)
+            top_k = self.task_settings.get("places_top_k", 5)
+
+            # Create places detection worker with dependencies
+            def create_places_detection_worker(session):
+                video_repo = SqlVideoRepository(session)
+                place_repo = SqlPlaceRepository(session)
+                detection_service = PlacesDetectionService(model_path=model_path)
+                detection_handler = PlacesDetectionTaskHandler(
+                    place_repository=place_repo,
+                    detection_service=detection_service,
+                    model_path=model_path,
+                    sample_rate=sample_rate,
+                    top_k=top_k,
+                )
+                return PlacesDetectionWorker(
+                    detection_handler=detection_handler,
+                    video_repository=video_repo,
+                )
+
+            return create_places_detection_worker
         else:
             # Generic workers for other task types - need to pass task_type
             task_type = self.config.task_type
@@ -641,6 +709,7 @@ class WorkerPoolManager:
             WorkerConfig(TaskType.SCENE_DETECTION, 2, ResourceType.CPU, 3),
             WorkerConfig(TaskType.OBJECT_DETECTION, 2, ResourceType.GPU, 3),
             WorkerConfig(TaskType.FACE_DETECTION, 2, ResourceType.GPU, 3),
+            WorkerConfig(TaskType.PLACES_DETECTION, 2, ResourceType.GPU, 4),
             WorkerConfig(TaskType.TOPIC_EXTRACTION, 1, ResourceType.CPU, 4),
             WorkerConfig(TaskType.EMBEDDING_GENERATION, 2, ResourceType.CPU, 2),
             WorkerConfig(TaskType.THUMBNAIL_GENERATION, 1, ResourceType.CPU, 4),

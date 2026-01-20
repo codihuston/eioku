@@ -164,6 +164,10 @@ The architecture follows a modular design with clear separation between video pr
 | Object Detection | YOLOv8 | YOLO26 | Proven, stable, good docs |
 | Face Detection | YOLOv8 Face | RetinaFace | Consistent with object detection |
 | Scene Detection | PySceneDetect | Custom | Mature, reliable, easy to use |
+| Action Detection | X3D / SlowFast | TimeSformer | Efficient 3D CNN, Kinetics-400 |
+| Emotion Detection | DeepFace | FER | Multi-backend, easy to use |
+| Places Detection | ResNet18 Places365 | Custom | MIT Places365, 365 categories |
+| OCR Text Detection | EasyOCR | Tesseract | Multi-language, GPU support |
 
 ## Architecture
 
@@ -195,6 +199,10 @@ graph TB
         TQ --> SceneQ[Scene Detection Queue]
         TQ --> ObjQ[Object Detection Queue]
         TQ --> FaceQ[Face Detection Queue]
+        TQ --> ActionQ[Action Detection Queue]
+        TQ --> EmotionQ[Emotion Detection Queue]
+        TQ --> PlacesQ[Places Detection Queue]
+        TQ --> OcrQ[OCR Text Detection Queue]
         TQ --> TopicQ[Topic Extraction Queue]
         TQ --> EmbedQ[Embedding Queue]
         TQ --> ThumbQ[Thumbnail Queue]
@@ -205,6 +213,10 @@ graph TB
         WP --> SceneW[Scene Workers]
         WP --> ObjW[Object Workers GPU]
         WP --> FaceW[Face Workers GPU]
+        WP --> ActionW[Action Workers GPU]
+        WP --> EmotionW[Emotion Workers GPU]
+        WP --> PlacesW[Places Workers GPU]
+        WP --> OcrW[OCR Workers GPU]
         WP --> TopicW[Topic Workers]
         WP --> EmbedW[Embedding Workers]
         WP --> ThumbW[Thumbnail Workers]
@@ -261,6 +273,26 @@ The system uses configurable processing profiles to control resource allocation 
     "face_detection": {
       "count": 2,
       "priority": "medium",
+      "resource": "gpu"
+    },
+    "action_detection": {
+      "count": 1,
+      "priority": "low",
+      "resource": "gpu"
+    },
+    "emotion_detection": {
+      "count": 1,
+      "priority": "low",
+      "resource": "gpu"
+    },
+    "places_detection": {
+      "count": 1,
+      "priority": "low",
+      "resource": "gpu"
+    },
+    "ocr_text_detection": {
+      "count": 1,
+      "priority": "low",
       "resource": "gpu"
     },
     "topic_extraction": {

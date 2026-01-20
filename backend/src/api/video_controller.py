@@ -284,6 +284,56 @@ async def get_video_faces(
     }
 
 
+@router.get("/{video_id}/places")
+async def get_video_places(
+    video_id: str, label: str = None, session: Session = Depends(get_db)
+):
+    """Get detected places for a video, optionally filtered by label."""
+    from ..repositories.place_repository import SqlPlaceRepository
+
+    place_repo = SqlPlaceRepository(session)
+
+    # Filter by label if provided
+    if label:
+        places = place_repo.find_by_label(video_id, label)
+    else:
+        places = place_repo.find_by_video_id(video_id)
+
+    if not places:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Places not found for this video",
+        )
+
+    # Convert places to dict format
+    places_data = [
+        {
+            "place_id": place.place_id,
+            "label": place.label,
+            "occurrences": place.get_occurrence_count(),
+            "first_appearance": place.get_first_appearance(),
+            "last_appearance": place.get_last_appearance(),
+            "confidence": place.confidence,
+            "timestamps": place.timestamps,
+            "alternative_labels": place.alternative_labels,
+            "metadata": place.metadata,
+            "created_at": place.created_at,
+        }
+        for place in places
+    ]
+
+    # Calculate statistics
+    total_occurrences = sum(place.get_occurrence_count() for place in places)
+
+    return {
+        "video_id": video_id,
+        "places": places_data,
+        "place_types": len(places),
+        "total_occurrences": total_occurrences,
+        "created_at": places[0].created_at if places else None,
+    }
+
+
 @router.get("/{video_id}/stream")
 async def stream_video(
     video_id: str,

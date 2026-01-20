@@ -176,6 +176,46 @@ class Face:
         return self.person_id is not None
 
 
+class Place:
+    """Domain model for Place - pure business object."""
+
+    def __init__(
+        self,
+        place_id: str,
+        video_id: str,
+        label: str,
+        timestamps: list[float],
+        confidence: float,
+        alternative_labels: list[dict] | None = None,
+        metadata: dict | None = None,
+        created_at: datetime | None = None,
+    ):
+        self.place_id = place_id
+        self.video_id = video_id
+        self.label = label
+        self.timestamps = timestamps
+        self.confidence = confidence
+        self.alternative_labels = alternative_labels or []
+        self.metadata = metadata or {}
+        self.created_at = created_at
+
+    def get_occurrence_count(self) -> int:
+        """Get number of times place appears in video."""
+        return len(self.timestamps)
+
+    def get_first_appearance(self) -> float | None:
+        """Get timestamp of first appearance."""
+        return min(self.timestamps) if self.timestamps else None
+
+    def get_last_appearance(self) -> float | None:
+        """Get timestamp of last appearance."""
+        return max(self.timestamps) if self.timestamps else None
+
+    def is_high_confidence(self, threshold: float = 0.5) -> bool:
+        """Check if place detection has high confidence."""
+        return self.confidence >= threshold
+
+
 class Topic:
     """Domain model for Topic - pure business object."""
 

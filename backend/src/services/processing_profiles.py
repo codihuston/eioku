@@ -162,6 +162,9 @@ class ProfileManager:
                 TaskType.FACE_DETECTION.value: WorkerConfig(
                     TaskType.FACE_DETECTION, 2, ResourceType.GPU, 3
                 ),
+                TaskType.PLACES_DETECTION.value: WorkerConfig(
+                    TaskType.PLACES_DETECTION, 2, ResourceType.GPU, 4
+                ),
                 TaskType.TOPIC_EXTRACTION.value: WorkerConfig(
                     TaskType.TOPIC_EXTRACTION, 1, ResourceType.CPU, 4
                 ),

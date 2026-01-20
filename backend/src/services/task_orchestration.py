@@ -20,6 +20,7 @@ class TaskType(Enum):
     SCENE_DETECTION = "scene_detection"
     OBJECT_DETECTION = "object_detection"
     FACE_DETECTION = "face_detection"
+    PLACES_DETECTION = "places_detection"
     TOPIC_EXTRACTION = "topic_extraction"
     EMBEDDING_GENERATION = "embedding_generation"
     THUMBNAIL_GENERATION = "thumbnail_generation"

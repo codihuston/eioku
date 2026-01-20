@@ -31,6 +31,12 @@ RUN mkdir -p /app/models && \
     fi && \
     if [ ! -f /app/models/yolov8n-face.pt ]; then \
         wget -q https://github.com/derronqi/yolov8-face/releases/download/v0.0.0/yolov8n-face.pt -O /app/models/yolov8n-face.pt; \
+    fi && \
+    if [ ! -f /app/models/resnet18_places365.pth.tar ]; then \
+        wget -q http://places2.csail.mit.edu/models_places365/resnet18_places365.pth.tar -O /app/models/resnet18_places365.pth.tar; \
+    fi && \
+    if [ ! -f /app/categories_places365.txt ]; then \
+        wget -q https://raw.githubusercontent.com/CSAILVision/places365/master/categories_places365.txt -O /app/categories_places365.txt; \
     fi
 
 # The virtualenv is now baked into the image
