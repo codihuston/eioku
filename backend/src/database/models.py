@@ -68,6 +68,19 @@ class Face(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class Place(Base):
+    __tablename__ = "places"
+
+    place_id = Column(String, primary_key=True)
+    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
+    label = Column(String, nullable=False, index=True)  # Place/scene label
+    timestamps = Column(JSON, nullable=False)  # Timestamps where place detected
+    confidence = Column(Float, nullable=False)  # Average confidence score
+    alternative_labels = Column(JSON)  # Top-K predictions with scores
+    metadata = Column(JSON)  # Model info and other metadata
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class Topic(Base):
     __tablename__ = "topics"
 

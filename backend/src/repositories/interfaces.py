@@ -4,6 +4,7 @@ from ..domain.models import (
     Face,
     Object,
     PathConfig,
+    Place,
     Scene,
     Task,
     Topic,
@@ -141,6 +142,30 @@ class FaceRepository(ABC):
     @abstractmethod
     def delete_by_video_id(self, video_id: str) -> bool:
         """Delete all faces for a video."""
+        pass
+
+
+class PlaceRepository(ABC):
+    """Abstract repository interface for Place persistence."""
+
+    @abstractmethod
+    def save(self, place: Place) -> Place:
+        """Save place to persistence layer."""
+        pass
+
+    @abstractmethod
+    def find_by_video_id(self, video_id: str) -> list[Place]:
+        """Find all places for a video."""
+        pass
+
+    @abstractmethod
+    def find_by_label(self, video_id: str, label: str) -> list[Place]:
+        """Find places by label within a video."""
+        pass
+
+    @abstractmethod
+    def delete_by_video_id(self, video_id: str) -> bool:
+        """Delete all places for a video."""
         pass
 
 
