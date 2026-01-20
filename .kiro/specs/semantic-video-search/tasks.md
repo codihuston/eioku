@@ -622,6 +622,178 @@ This implementation plan breaks down the Eioku semantic video search platform in
 - [ ] 25. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
+- [ ] 26. Implement action detection pipeline
+  - [ ] 26.1 Implement action detection service
+    - Load X3D, SlowFast, or TimeSformer model for action recognition
+    - Sample video clips at configured interval (window size + stride)
+    - Run action detection on sampled clips
+    - Handle GPU acceleration if available
+    - Use Kinetics-400 labels for action classification
+    - _Requirements: 6.6_
+  
+  - [ ] 26.2 Implement action detection task handler
+    - Create ActionDetectionTaskHandler following existing pattern
+    - Integrate with task orchestration system
+    - Handle task lifecycle (pending → running → completed/failed)
+    - Store action detections in database
+    - _Requirements: 6.2, 6.5_
+  
+  - [ ] 26.3 Create Actions database table and DAO
+    - Define columns: actionId, videoId, label, timestamps (JSON), confidence, metadata (JSON)
+    - Add foreign key to Videos table
+    - Add index on videoId and label
+    - Implement CRUD operations in Action DAO
+    - _Requirements: 4.1, 4.2_
+  
+  - [ ] 26.4 Integrate action detection worker
+    - Add ActionDetectionWorker to worker pool manager
+    - Configure worker count and priority in processing profiles
+    - Add ACTION_DETECTION to TaskType enum
+    - _Requirements: 6.2_
+  
+  - [ ] 26.5 Implement action detection API endpoint
+    - GET /v1/videos/{id}/actions - get detected actions
+    - Return action labels, timestamps, and confidence scores
+    - _Requirements: 8.1, 8.2_
+  
+  - [ ]* 26.6 Write unit tests for action detection
+    - Test clip sampling and window generation
+    - Test action detection aggregation
+    - Test GPU fallback to CPU
+    - Test API endpoint
+    - _Requirements: 6.6_
+
+- [ ] 27. Implement emotion detection pipeline
+  - [ ] 27.1 Implement emotion detection service
+    - Load DeepFace library for emotion analysis
+    - Sample frames at configured interval
+    - Detect faces and analyze emotions per face
+    - Handle GPU acceleration if available
+    - Store dominant emotion and confidence scores
+    - _Requirements: 6.6_
+  
+  - [ ] 27.2 Implement emotion detection task handler
+    - Create EmotionDetectionTaskHandler following existing pattern
+    - Integrate with task orchestration system
+    - Handle task lifecycle (pending → running → completed/failed)
+    - Store emotion detections in database
+    - _Requirements: 6.2, 6.5_
+  
+  - [ ] 27.3 Create Emotions database table and DAO
+    - Define columns: emotionId, videoId, faceId, timestamps (JSON), dominantEmotion, emotionScores (JSON), confidence
+    - Add foreign key to Videos table
+    - Add index on videoId and dominantEmotion
+    - Implement CRUD operations in Emotion DAO
+    - _Requirements: 4.1, 4.2_
+  
+  - [ ] 27.4 Integrate emotion detection worker
+    - Add EmotionDetectionWorker to worker pool manager
+    - Configure worker count and priority in processing profiles
+    - Add EMOTION_DETECTION to TaskType enum
+    - _Requirements: 6.2_
+  
+  - [ ] 27.5 Implement emotion detection API endpoint
+    - GET /v1/videos/{id}/emotions - get detected emotions
+    - Return emotion labels, timestamps, face associations, and scores
+    - _Requirements: 8.1, 8.2_
+  
+  - [ ]* 27.6 Write unit tests for emotion detection
+    - Test frame sampling
+    - Test emotion detection per face
+    - Test GPU fallback to CPU
+    - Test API endpoint
+    - _Requirements: 6.6_
+
+- [ ] 28. Implement places detection pipeline
+  - [ ] 28.1 Implement places detection service
+    - Load ResNet18 Places365 model for scene classification
+    - Sample frames at configured interval
+    - Classify scenes/locations using Places365 categories
+    - Handle GPU acceleration if available
+    - Store top-5 place predictions with confidence scores
+    - _Requirements: 6.6_
+  
+  - [ ] 28.2 Implement places detection task handler
+    - Create PlacesDetectionTaskHandler following existing pattern
+    - Integrate with task orchestration system
+    - Handle task lifecycle (pending → running → completed/failed)
+    - Store place detections in database
+    - _Requirements: 6.2, 6.5_
+  
+  - [ ] 28.3 Create Places database table and DAO
+    - Define columns: placeId, videoId, label, timestamps (JSON), confidence, alternativeLabels (JSON)
+    - Add foreign key to Videos table
+    - Add index on videoId and label
+    - Implement CRUD operations in Place DAO
+    - _Requirements: 4.1, 4.2_
+  
+  - [ ] 28.4 Integrate places detection worker
+    - Add PlacesDetectionWorker to worker pool manager
+    - Configure worker count and priority in processing profiles
+    - Add PLACES_DETECTION to TaskType enum
+    - _Requirements: 6.2_
+  
+  - [ ] 28.5 Implement places detection API endpoint
+    - GET /v1/videos/{id}/places - get detected places/scenes
+    - Return place labels, timestamps, and confidence scores
+    - _Requirements: 8.1, 8.2_
+  
+  - [ ]* 28.6 Write unit tests for places detection
+    - Test frame sampling
+    - Test scene classification
+    - Test GPU fallback to CPU
+    - Test API endpoint
+    - _Requirements: 6.6_
+
+- [ ] 29. Implement OCR text detection pipeline
+  - [ ] 29.1 Implement OCR text detection service
+    - Load EasyOCR library for text extraction
+    - Sample frames at configured interval (or time-based)
+    - Extract text with bounding boxes and confidence scores
+    - Support include/exclude regions for targeted text extraction
+    - Handle GPU acceleration if available (MPS, CUDA, or CPU)
+    - _Requirements: 6.6_
+  
+  - [ ] 29.2 Implement OCR text detection task handler
+    - Create OcrTextDetectionTaskHandler following existing pattern
+    - Integrate with task orchestration system
+    - Handle task lifecycle (pending → running → completed/failed)
+    - Store text detections in database
+    - _Requirements: 6.2, 6.5_
+  
+  - [ ] 29.3 Create OcrTexts database table and DAO
+    - Define columns: textId, videoId, text, timestamps (JSON), boundingBoxes (JSON), confidence, metadata (JSON)
+    - Add foreign key to Videos table
+    - Add index on videoId and text (full-text search)
+    - Implement CRUD operations in OcrText DAO
+    - _Requirements: 4.1, 4.2_
+  
+  - [ ] 29.4 Integrate OCR text detection worker
+    - Add OcrTextDetectionWorker to worker pool manager
+    - Configure worker count and priority in processing profiles
+    - Add OCR_TEXT_DETECTION to TaskType enum
+    - _Requirements: 6.2_
+  
+  - [ ] 29.5 Implement OCR text detection API endpoint
+    - GET /v1/videos/{id}/ocr-text - get detected text
+    - Return text content, timestamps, bounding boxes, and confidence
+    - Support search/filter by text content
+    - _Requirements: 8.1, 8.2_
+  
+  - [ ]* 29.6 Write unit tests for OCR text detection
+    - Test frame sampling (frame-based and time-based)
+    - Test text extraction with bounding boxes
+    - Test include/exclude regions
+    - Test GPU fallback to CPU
+    - Test API endpoint
+    - _Requirements: 6.6_
+
+- [ ] 30. Checkpoint - Ensure all detection pipeline tests pass
+  - Ensure all tests pass for new detection types
+  - Verify worker pool integration
+  - Validate API endpoints
+  - Ask the user if questions arise
+
 ## Notes
 
 - Tasks marked with `*` are optional and can be skipped for faster MVP
