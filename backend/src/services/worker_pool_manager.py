@@ -709,6 +709,7 @@ class WorkerPoolManager:
             WorkerConfig(TaskType.SCENE_DETECTION, 2, ResourceType.CPU, 3),
             WorkerConfig(TaskType.OBJECT_DETECTION, 2, ResourceType.GPU, 3),
             WorkerConfig(TaskType.FACE_DETECTION, 2, ResourceType.GPU, 3),
+            WorkerConfig(TaskType.PLACES_DETECTION, 2, ResourceType.GPU, 4),
             WorkerConfig(TaskType.TOPIC_EXTRACTION, 1, ResourceType.CPU, 4),
             WorkerConfig(TaskType.EMBEDDING_GENERATION, 2, ResourceType.CPU, 2),
             WorkerConfig(TaskType.THUMBNAIL_GENERATION, 1, ResourceType.CPU, 4),

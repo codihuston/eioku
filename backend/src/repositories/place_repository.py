@@ -74,7 +74,7 @@ class SqlPlaceRepository(PlaceRepository):
             timestamps=domain.timestamps,
             confidence=domain.confidence,
             alternative_labels=domain.alternative_labels,
-            metadata=domain.metadata,
+            detection_metadata=domain.metadata,
         )
 
     def _to_domain(self, entity: PlaceEntity) -> Place:
@@ -86,6 +86,6 @@ class SqlPlaceRepository(PlaceRepository):
             timestamps=entity.timestamps,
             confidence=entity.confidence,
             alternative_labels=entity.alternative_labels,
-            metadata=entity.metadata,
+            metadata=entity.detection_metadata,
             created_at=entity.created_at,
         )

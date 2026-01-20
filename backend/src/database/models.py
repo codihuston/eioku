@@ -77,7 +77,8 @@ class Place(Base):
     timestamps = Column(JSON, nullable=False)  # Timestamps where place detected
     confidence = Column(Float, nullable=False)  # Average confidence score
     alternative_labels = Column(JSON)  # Top-K predictions with scores
-    metadata = Column(JSON)  # Model info and other metadata
+    detection_metadata = Column(JSON)  # Model info and other metadata
+    # (renamed from metadata to avoid SQLAlchemy conflict)
     created_at = Column(DateTime, server_default=func.now())
 
 

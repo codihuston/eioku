@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("timestamps", sa.JSON(), nullable=False),
         sa.Column("confidence", sa.Float(), nullable=False),
         sa.Column("alternative_labels", sa.JSON(), nullable=True),
-        sa.Column("metadata", sa.JSON(), nullable=True),
+        sa.Column("detection_metadata", sa.JSON(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")
         ),
