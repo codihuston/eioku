@@ -1,0 +1,26 @@
+{
+  "name": "test_places",
+  "description": "Test configuration for places detection only",
+  "workers": {
+    "hash": {
+      "count": 2,
+      "priority": 1,
+      "resource": "cpu"
+    },
+    "places_detection": {
+      "count": 1,
+      "priority": 2,
+      "resource": "gpu"
+    }
+  },
+  "task_settings": {
+    "max_concurrent_videos": 1,
+    "frame_sampling_interval": 30,
+    "face_sampling_interval_seconds": 5.0,
+    "transcription_model": "large-v3",
+    "object_detection_model": "yolov8n.pt",
+    "face_detection_model": "yolov8n-face.pt",
+    "places_detection_model": "models/resnet18_places365.pth.tar",
+    "places_top_k": 5
+  }
+}

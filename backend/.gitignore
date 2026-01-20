@@ -59,3 +59,7 @@ Thumbs.db
 # YOLO Models
 *.pt
 models/
+
+# Places365 Models
+*.pth.tar
+categories_places365.txt

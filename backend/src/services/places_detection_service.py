@@ -23,7 +23,7 @@ class PlacesDetectionError(Exception):
 class PlacesDetectionService:
     """Service for detecting places/scenes in video frames using ResNet18 Places365."""
 
-    def __init__(self, model_path: str = "resnet18_places365.pth.tar"):
+    def __init__(self, model_path: str = "models/resnet18_places365.pth.tar"):
         """Initialize places detection service.
 
         Args:

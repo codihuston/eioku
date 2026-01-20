@@ -607,7 +607,7 @@ class WorkerPool:
 
             # Get settings from task_settings
             model_path = self.task_settings.get(
-                "places_detection_model", "resnet18_places365.pth.tar"
+                "places_detection_model", "models/resnet18_places365.pth.tar"
             )
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
             top_k = self.task_settings.get("places_top_k", 5)
