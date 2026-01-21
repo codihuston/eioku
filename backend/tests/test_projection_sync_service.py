@@ -145,3 +145,83 @@ class TestProjectionSyncService:
         call_args = self.mock_session.execute.call_args
         params = call_args[0][1]
         assert params["text"] == 'Hello "world" & <test>'
+
+    def test_sync_scene_artifact(self):
+        """Test syncing scene artifact to scene_ranges projection."""
+        # Create scene artifact
+        scene_artifact = ArtifactEnvelope(
+            artifact_id="scene_123",
+            asset_id="video_123",
+            artifact_type="scene",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=5000,
+            payload_json=(
+                '{"scene_index": 1, "method": "content", '
+                '"score": 0.95, "frame_number": 150}'
+            ),
+            producer="pyscenedetect",
+            producer_version="0.6.1",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_123",
+            created_at=datetime.utcnow(),
+        )
+
+        # Sync artifact
+        self.service.sync_artifact(scene_artifact)
+
+        # Verify SQL was executed
+        assert self.mock_session.execute.called
+        assert self.mock_session.commit.called
+
+        # Verify the SQL contains the expected data
+        call_args = self.mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["artifact_id"] == "scene_123"
+        assert params["asset_id"] == "video_123"
+        assert params["scene_index"] == 1
+        assert params["start_ms"] == 0
+        assert params["end_ms"] == 5000
+
+    def test_sync_object_detection_artifact(self):
+        """Test syncing object.detection artifact to object_labels projection."""
+        # Create object detection artifact
+        object_artifact = ArtifactEnvelope(
+            artifact_id="object_123",
+            asset_id="video_123",
+            artifact_type="object.detection",
+            schema_version=1,
+            span_start_ms=1000,
+            span_end_ms=1001,
+            payload_json=(
+                '{"label": "person", "confidence": 0.92, '
+                '"bounding_box": {"x": 100, "y": 150, "width": 200, "height": 300}, '
+                '"frame_number": 30}'
+            ),
+            producer="yolo",
+            producer_version="yolov8n.pt",
+            model_profile="fast",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_123",
+            created_at=datetime.utcnow(),
+        )
+
+        # Sync artifact
+        self.service.sync_artifact(object_artifact)
+
+        # Verify SQL was executed
+        assert self.mock_session.execute.called
+        assert self.mock_session.commit.called
+
+        # Verify the SQL contains the expected data
+        call_args = self.mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["artifact_id"] == "object_123"
+        assert params["asset_id"] == "video_123"
+        assert params["label"] == "person"
+        assert params["confidence"] == 0.92
+        assert params["start_ms"] == 1000
+        assert params["end_ms"] == 1001

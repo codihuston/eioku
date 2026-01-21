@@ -847,23 +847,32 @@ class TestObjectDetectionTaskHandler:
 
     def test_initialization(self):
         """Test handler initialization."""
-        mock_repo = Mock()
-        handler = ObjectDetectionTaskHandler(object_repository=mock_repo)
-        assert handler.object_repository == mock_repo
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
+        handler = ObjectDetectionTaskHandler(
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+        )
+        assert handler.artifact_repository == mock_artifact_repo
+        assert handler.schema_registry == mock_schema_registry
         assert handler.detection_service is not None
 
     def test_initialization_with_custom_service(self):
         """Test handler initialization with custom detection service."""
-        mock_repo = Mock()
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
         mock_service = Mock()
         handler = ObjectDetectionTaskHandler(
-            object_repository=mock_repo, detection_service=mock_service
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+            detection_service=mock_service,
         )
         assert handler.detection_service == mock_service
 
     def test_process_object_detection_task_success(self):
         """Test successful object detection task processing."""
-        mock_repo = Mock()
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
         mock_service = Mock()
 
         obj1 = Object(
@@ -904,7 +913,9 @@ class TestObjectDetectionTaskHandler:
         mock_service.detect_objects_in_video.return_value = [obj1, obj2]
 
         handler = ObjectDetectionTaskHandler(
-            object_repository=mock_repo, detection_service=mock_service
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+            detection_service=mock_service,
         )
 
         task = Task(
@@ -926,18 +937,20 @@ class TestObjectDetectionTaskHandler:
         mock_service.detect_objects_in_video.assert_called_once_with(
             video_path="/path/to/video.mp4", video_id="test_video", sample_rate=30
         )
-        assert mock_repo.save.call_count == 2
-        mock_repo.save.assert_any_call(obj1)
-        mock_repo.save.assert_any_call(obj2)
+        # Should create 3 artifacts (2 from obj1 + 1 from obj2)
+        assert mock_artifact_repo.create.call_count == 3
 
     def test_process_object_detection_task_failure(self):
         """Test object detection task processing with failure."""
-        mock_repo = Mock()
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
         mock_service = Mock()
         mock_service.detect_objects_in_video.side_effect = Exception("Detection failed")
 
         handler = ObjectDetectionTaskHandler(
-            object_repository=mock_repo, detection_service=mock_service
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+            detection_service=mock_service,
         )
 
         task = Task(
@@ -956,16 +969,19 @@ class TestObjectDetectionTaskHandler:
         result = handler.process_object_detection_task(task, video)
 
         assert result is False
-        mock_repo.save.assert_not_called()
+        mock_artifact_repo.create.assert_not_called()
 
     def test_process_object_detection_task_no_objects(self):
         """Test object detection task when no objects are detected."""
-        mock_repo = Mock()
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
         mock_service = Mock()
         mock_service.detect_objects_in_video.return_value = []
 
         handler = ObjectDetectionTaskHandler(
-            object_repository=mock_repo, detection_service=mock_service
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+            detection_service=mock_service,
         )
 
         task = Task(
@@ -984,36 +1000,57 @@ class TestObjectDetectionTaskHandler:
         result = handler.process_object_detection_task(task, video)
 
         assert result is True
-        mock_repo.save.assert_not_called()
+        mock_artifact_repo.create.assert_not_called()
 
     def test_get_detected_objects(self):
         """Test retrieving detected objects for a video."""
-        mock_repo = Mock()
-        mock_objects = [Mock(), Mock()]
-        mock_repo.find_by_video_id.return_value = mock_objects
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
+        mock_artifacts = [Mock(), Mock()]
+        mock_artifact_repo.get_by_asset.return_value = mock_artifacts
 
-        handler = ObjectDetectionTaskHandler(object_repository=mock_repo)
+        handler = ObjectDetectionTaskHandler(
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+        )
         result = handler.get_detected_objects("test_video")
 
-        assert result == mock_objects
-        mock_repo.find_by_video_id.assert_called_once_with("test_video")
+        assert result == mock_artifacts
+        mock_artifact_repo.get_by_asset.assert_called_once_with(
+            asset_id="test_video", artifact_type="object.detection"
+        )
 
     def test_get_objects_by_label(self):
         """Test retrieving detected objects filtered by label."""
-        mock_repo = Mock()
-        mock_objects = [Mock()]
-        mock_repo.find_by_label.return_value = mock_objects
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
 
-        handler = ObjectDetectionTaskHandler(object_repository=mock_repo)
+        # Create mock artifacts with person label
+        mock_artifact = Mock()
+        mock_artifact.payload_json = (
+            '{"label": "person", "confidence": 0.9, '
+            '"bounding_box": {"x": 10, "y": 20, "width": 30, "height": 40}, '
+            '"frame_number": 30}'
+        )
+        mock_artifact_repo.get_by_asset.return_value = [mock_artifact]
+
+        handler = ObjectDetectionTaskHandler(
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+        )
         result = handler.get_objects_by_label("test_video", "person")
 
-        assert result == mock_objects
-        mock_repo.find_by_label.assert_called_once_with("test_video", "person")
+        assert len(result) == 1
+        assert result[0] == mock_artifact
+        mock_artifact_repo.get_by_asset.assert_called_once_with(
+            asset_id="test_video", artifact_type="object.detection"
+        )
 
     def test_process_task_repository_save_failure(self):
         """Test handling when repository save fails."""
-        mock_repo = Mock()
-        mock_repo.save.side_effect = Exception("Database error")
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
+        mock_artifact_repo.create.side_effect = Exception("Database error")
         mock_service = Mock()
 
         obj = Object(
@@ -1033,7 +1070,9 @@ class TestObjectDetectionTaskHandler:
         mock_service.detect_objects_in_video.return_value = [obj]
 
         handler = ObjectDetectionTaskHandler(
-            object_repository=mock_repo, detection_service=mock_service
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+            detection_service=mock_service,
         )
 
         task = Task(
@@ -1056,12 +1095,15 @@ class TestObjectDetectionTaskHandler:
 
     def test_process_task_with_special_characters_in_video_id(self):
         """Test handling video IDs with special characters."""
-        mock_repo = Mock()
+        mock_artifact_repo = Mock()
+        mock_schema_registry = Mock()
         mock_service = Mock()
         mock_service.detect_objects_in_video.return_value = []
 
         handler = ObjectDetectionTaskHandler(
-            object_repository=mock_repo, detection_service=mock_service
+            artifact_repository=mock_artifact_repo,
+            schema_registry=mock_schema_registry,
+            detection_service=mock_service,
         )
 
         special_video_id = "video-with-special_chars.123"

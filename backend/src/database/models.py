@@ -169,3 +169,18 @@ class SceneRange(Base):
     scene_index = Column(Integer, nullable=False, index=True)
     start_ms = Column(Integer, nullable=False)
     end_ms = Column(Integer, nullable=False)
+
+
+class ObjectLabel(Base):
+    """SQLAlchemy entity for object_labels projection table."""
+
+    __tablename__ = "object_labels"
+
+    artifact_id = Column(
+        String, ForeignKey("artifacts.artifact_id"), nullable=False, primary_key=True
+    )
+    asset_id = Column(String, nullable=False, index=True)
+    label = Column(String, nullable=False, index=True)
+    confidence = Column(Float, nullable=False, index=True)
+    start_ms = Column(Integer, nullable=False)
+    end_ms = Column(Integer, nullable=False)

@@ -150,16 +150,16 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 6: Artifact Type Storage Consistency (partial)**
   - **Validates: Requirements 13.2**
 
-- [ ] 9. Object Detection Artifact Integration
-- [ ] 9.1 Update object detection service to create object.detection artifacts
+- [x] 9. Object Detection Artifact Integration
+- [x] 9.1 Update object detection service to create object.detection artifacts
   - Modify YOLO integration to use ArtifactRepository
   - Create one artifact per detection
   - _Requirements: 14.2, 14.3, 14.5_
 
-- [ ] 9.2 Create Alembic migration for object_labels projection table
+- [x] 9.2 Create Alembic migration for object_labels projection table
   - _Requirements: 18.1_
 
-- [ ] 9.3 Implement object_labels projection synchronization
+- [x] 9.3 Implement object_labels projection synchronization
   - _Requirements: 18.2_
 
 - [ ]* 9.4 Write property test for artifact storage (objects)
