@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from ..domain.artifacts import ArtifactEnvelope, SelectionPolicy
+from ..domain.artifacts import ArtifactEnvelope, Run, SelectionPolicy
 from ..domain.models import (
     Face,
     Object,
@@ -237,7 +237,6 @@ class TaskRepository(ABC):
         pass
 
 
-
 class ArtifactRepository(ABC):
     """Abstract repository interface for Artifact persistence."""
 
@@ -278,4 +277,38 @@ class ArtifactRepository(ABC):
     @abstractmethod
     def delete(self, artifact_id: str) -> bool:
         """Delete an artifact."""
+        pass
+
+
+class RunRepository(ABC):
+    """Abstract repository interface for Run persistence."""
+
+    @abstractmethod
+    def create(self, run: Run) -> Run:
+        """Create a new run record."""
+        pass
+
+    @abstractmethod
+    def get_by_id(self, run_id: str) -> Run | None:
+        """Get run by ID."""
+        pass
+
+    @abstractmethod
+    def get_by_asset(self, asset_id: str) -> list[Run]:
+        """Get all runs for an asset."""
+        pass
+
+    @abstractmethod
+    def get_by_status(self, status: str) -> list[Run]:
+        """Get all runs with a specific status."""
+        pass
+
+    @abstractmethod
+    def update(self, run: Run) -> Run:
+        """Update an existing run record."""
+        pass
+
+    @abstractmethod
+    def delete(self, run_id: str) -> bool:
+        """Delete a run record."""
         pass

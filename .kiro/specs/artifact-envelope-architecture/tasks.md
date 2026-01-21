@@ -82,8 +82,8 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 15: Time Span Overlap Query**
   - **Validates: Requirements 7.3**
 
-- [ ] 4. Run Tracking
-- [ ] 4.1 Implement Run domain model and repository
+- [x] 4. Run Tracking
+- [x] 4.1 Implement Run domain model and repository
   - Create Run dataclass
   - Implement RunRepository with CRUD operations
   - _Requirements: 2.1_
