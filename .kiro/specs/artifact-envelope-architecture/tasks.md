@@ -106,8 +106,8 @@ This plan implements the artifact envelope architecture for Eioku's video proces
 - [x] 6. Checkpoint - Core Infrastructure Complete
 - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Transcript Artifact Integration
-- [ ] 7.1 Update transcription service to create transcript.segment artifacts
+- [x] 7. Transcript Artifact Integration
+- [x] 7.1 Update transcription service to create transcript.segment artifacts
   - Modify WhisperService or equivalent to use ArtifactRepository
   - Create artifacts with proper envelope metadata
   - _Requirements: 4.2, 4.3_
@@ -116,13 +116,13 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 6: Artifact Type Storage Consistency (partial)**
   - **Validates: Requirements 4.2**
 
-- [ ] 7.3 Create Alembic migration for transcript_fts projection table
+- [x] 7.3 Create Alembic migration for transcript_fts projection table
   - Create table with tsvector column
   - Add GIN index on text_tsv
   - Add index on (asset_id, start_ms)
   - _Requirements: 5.1_
 
-- [ ] 7.4 Implement transcript FTS projection synchronization
+- [x] 7.4 Implement transcript FTS projection synchronization
   - Create sync_transcript_fts() function
   - Call from artifact creation
   - _Requirements: 5.2_

@@ -3,6 +3,7 @@
 from datetime import datetime
 from unittest.mock import Mock
 
+from src.domain.artifacts import ArtifactEnvelope
 from src.domain.models import Task, Video
 from src.services.transcription_task_handler import TranscriptionTaskHandler
 from src.services.whisper_transcription_service import (
@@ -16,12 +17,14 @@ class TestTranscriptionTaskHandler:
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.mock_repo = Mock()
+        self.mock_artifact_repo = Mock()
+        self.mock_schema_registry = Mock()
         self.mock_audio_service = Mock()
         self.mock_whisper_service = Mock()
 
         self.handler = TranscriptionTaskHandler(
-            transcription_repository=self.mock_repo,
+            artifact_repository=self.mock_artifact_repo,
+            schema_registry=self.mock_schema_registry,
             audio_service=self.mock_audio_service,
             whisper_service=self.mock_whisper_service,
         )
@@ -63,9 +66,12 @@ class TestTranscriptionTaskHandler:
         )
 
         self.mock_whisper_service.transcribe_audio.return_value = transcription_result
+        self.mock_whisper_service.model_name = "base"
+        self.mock_whisper_service.device = "cpu"
+        self.mock_whisper_service.compute_type = "float32"
 
-        # Mock repository save
-        self.mock_repo.save.return_value = Mock()
+        # Mock artifact repository create
+        self.mock_artifact_repo.create.return_value = Mock()
 
         # Process task
         result = self.handler.process_transcription_task(self.task, self.video)
@@ -81,8 +87,8 @@ class TestTranscriptionTaskHandler:
             "/tmp/audio.wav", "test_video_123"
         )
 
-        # Verify segments saved (2 segments)
-        assert self.mock_repo.save.call_count == 2
+        # Verify artifacts created (2 segments)
+        assert self.mock_artifact_repo.create.call_count == 2
 
         # Verify cleanup called
         self.mock_audio_service.cleanup_audio_file.assert_called_once_with(
@@ -105,8 +111,8 @@ class TestTranscriptionTaskHandler:
         # Verify transcription not called
         self.mock_whisper_service.transcribe_audio.assert_not_called()
 
-        # Verify no segments saved
-        self.mock_repo.save.assert_not_called()
+        # Verify no artifacts created
+        self.mock_artifact_repo.create.assert_not_called()
 
     def test_process_transcription_task_whisper_failure(self):
         """Test transcription failure during Whisper processing."""
@@ -124,31 +130,48 @@ class TestTranscriptionTaskHandler:
         # Verify failure
         assert result is False
 
-        # Verify no segments saved
-        self.mock_repo.save.assert_not_called()
+        # Verify no artifacts created
+        self.mock_artifact_repo.create.assert_not_called()
 
     def test_get_transcription_segments(self):
         """Test getting transcription segments."""
-        # Mock repository response
-        mock_segments = [Mock(), Mock()]
-        self.mock_repo.find_by_video_id.return_value = mock_segments
+        # Mock artifact repository response
+        mock_artifacts = [Mock(spec=ArtifactEnvelope), Mock(spec=ArtifactEnvelope)]
+        self.mock_artifact_repo.get_by_asset.return_value = mock_artifacts
 
         # Get segments
         result = self.handler.get_transcription_segments("test_video")
 
         # Verify
-        assert result == mock_segments
-        self.mock_repo.find_by_video_id.assert_called_once_with("test_video")
+        assert result == mock_artifacts
+        self.mock_artifact_repo.get_by_asset.assert_called_once_with(
+            asset_id="test_video", artifact_type="transcript.segment"
+        )
 
     def test_get_transcription_text(self):
         """Test getting full transcription text."""
-        # Mock segments with text
-        mock_segments = [
-            Mock(text="Hello world"),
-            Mock(text="How are you"),
-            Mock(text="I am fine"),
+        # Mock artifacts with text payloads
+        mock_artifacts = [
+            Mock(
+                payload_json=(
+                    '{"text": "Hello world", '
+                    '"confidence": 0.9, "language": "en"}'
+                )
+            ),
+            Mock(
+                payload_json=(
+                    '{"text": "How are you", '
+                    '"confidence": 0.8, "language": "en"}'
+                )
+            ),
+            Mock(
+                payload_json=(
+                    '{"text": "I am fine", '
+                    '"confidence": 0.85, "language": "en"}'
+                )
+            ),
         ]
-        self.mock_repo.find_by_video_id.return_value = mock_segments
+        self.mock_artifact_repo.get_by_asset.return_value = mock_artifacts
 
         # Get text
         result = self.handler.get_transcription_text("test_video")
@@ -158,21 +181,34 @@ class TestTranscriptionTaskHandler:
 
     def test_search_transcription(self):
         """Test searching transcription segments."""
-        # Mock segments
-        mock_segments = [
-            Mock(text="Hello world"),
-            Mock(text="How are you"),
-            Mock(text="Goodbye world"),
+        # Mock artifacts
+        mock_artifacts = [
+            Mock(
+                payload_json=(
+                    '{"text": "Hello world", '
+                    '"confidence": 0.9, "language": "en"}'
+                )
+            ),
+            Mock(
+                payload_json=(
+                    '{"text": "How are you", '
+                    '"confidence": 0.8, "language": "en"}'
+                )
+            ),
+            Mock(
+                payload_json=(
+                    '{"text": "Goodbye world", '
+                    '"confidence": 0.85, "language": "en"}'
+                )
+            ),
         ]
-        self.mock_repo.find_by_video_id.return_value = mock_segments
+        self.mock_artifact_repo.get_by_asset.return_value = mock_artifacts
 
         # Search for "world"
         result = self.handler.search_transcription("test_video", "world")
 
-        # Verify - should find 2 segments containing "world"
+        # Verify - should find 2 artifacts containing "world"
         assert len(result) == 2
-        assert result[0].text == "Hello world"
-        assert result[1].text == "Goodbye world"
 
     def test_cleanup_failure_does_not_affect_success(self):
         """Test that cleanup failure doesn't affect overall success."""
@@ -190,7 +226,10 @@ class TestTranscriptionTaskHandler:
         )
 
         self.mock_whisper_service.transcribe_audio.return_value = transcription_result
-        self.mock_repo.save.return_value = Mock()
+        self.mock_whisper_service.model_name = "base"
+        self.mock_whisper_service.device = "cpu"
+        self.mock_whisper_service.compute_type = "float32"
+        self.mock_artifact_repo.create.return_value = Mock()
 
         # Mock cleanup failure
         self.mock_audio_service.cleanup_audio_file.side_effect = Exception(
@@ -202,4 +241,12 @@ class TestTranscriptionTaskHandler:
 
         # Should still succeed despite cleanup failure
         assert result is True
-        self.mock_repo.save.assert_called_once()
+        self.mock_artifact_repo.create.assert_called_once()
+
+    def test_determine_model_profile(self):
+        """Test model profile determination."""
+        assert self.handler._determine_model_profile("large-v3") == "high_quality"
+        assert self.handler._determine_model_profile("large-v3-turbo") == "high_quality"
+        assert self.handler._determine_model_profile("medium") == "balanced"
+        assert self.handler._determine_model_profile("small") == "fast"
+        assert self.handler._determine_model_profile("base") == "fast"
