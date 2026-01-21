@@ -102,3 +102,56 @@ class Task(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     error = Column(Text)  # Error message if failed
+
+
+class Artifact(Base):
+    """SQLAlchemy entity for artifact envelope storage."""
+
+    __tablename__ = "artifacts"
+
+    artifact_id = Column(String, primary_key=True)
+    asset_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
+    artifact_type = Column(String, nullable=False, index=True)
+    schema_version = Column(Integer, nullable=False)
+    span_start_ms = Column(Integer, nullable=False)
+    span_end_ms = Column(Integer, nullable=False)
+    payload_json = Column(JSON, nullable=False)  # JSONB in PostgreSQL, JSON in SQLite
+    producer = Column(String, nullable=False)
+    producer_version = Column(String, nullable=False)
+    model_profile = Column(String, nullable=False, index=True)
+    config_hash = Column(String, nullable=False)
+    input_hash = Column(String, nullable=False)
+    run_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class Run(Base):
+    """SQLAlchemy entity for pipeline run tracking."""
+
+    __tablename__ = "runs"
+
+    run_id = Column(String, primary_key=True)
+    asset_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
+    pipeline_profile = Column(String, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    finished_at = Column(DateTime)
+    status = Column(String, nullable=False, index=True)
+    error = Column(Text)
+
+
+class ArtifactSelection(Base):
+    """SQLAlchemy entity for artifact selection policies."""
+
+    __tablename__ = "artifact_selections"
+
+    asset_id = Column(
+        String, ForeignKey("videos.video_id"), nullable=False, primary_key=True
+    )
+    artifact_type = Column(String, nullable=False, primary_key=True)
+    selection_mode = Column(String, nullable=False)
+    preferred_profile = Column(String)
+    pinned_run_id = Column(String)
+    pinned_artifact_id = Column(String)
+    updated_at = Column(
+        DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+    )

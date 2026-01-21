@@ -56,8 +56,8 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 2: Schema Validation Round-Trip**
   - **Validates: Requirements 1.2, 3.2, 3.3**
 
-- [ ] 3. Artifact Repository
-- [ ] 3.1 Implement ArtifactRepository with CRUD operations
+- [x] 3. Artifact Repository
+- [x] 3.1 Implement ArtifactRepository with CRUD operations
   - create() with schema validation
   - get_by_id()
   - get_by_asset() with filtering
@@ -65,7 +65,7 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - delete()
   - _Requirements: 7.1, 7.2, 7.3_
 
-- [ ] 3.2 Implement selection policy application in repository
+- [x] 3.2 Implement selection policy application in repository
   - _apply_selection_policy() helper method
   - Support all selection modes (default, pinned, latest, profile, best_quality)
   - _Requirements: 7.4, 6.3, 6.4, 6.5_

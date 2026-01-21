@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from ..domain.artifacts import ArtifactEnvelope, SelectionPolicy
 from ..domain.models import (
     Face,
     Object,
@@ -233,4 +234,48 @@ class TaskRepository(ABC):
     @abstractmethod
     def delete_by_video_id(self, video_id: str) -> bool:
         """Delete all tasks for a video."""
+        pass
+
+
+
+class ArtifactRepository(ABC):
+    """Abstract repository interface for Artifact persistence."""
+
+    @abstractmethod
+    def create(self, artifact: ArtifactEnvelope) -> ArtifactEnvelope:
+        """Create a new artifact with schema validation."""
+        pass
+
+    @abstractmethod
+    def get_by_id(self, artifact_id: str) -> ArtifactEnvelope | None:
+        """Get artifact by ID."""
+        pass
+
+    @abstractmethod
+    def get_by_asset(
+        self,
+        asset_id: str,
+        artifact_type: str | None = None,
+        start_ms: int | None = None,
+        end_ms: int | None = None,
+        selection: SelectionPolicy | None = None,
+    ) -> list[ArtifactEnvelope]:
+        """Get artifacts for an asset with optional filtering."""
+        pass
+
+    @abstractmethod
+    def get_by_span(
+        self,
+        asset_id: str,
+        artifact_type: str,
+        span_start_ms: int,
+        span_end_ms: int,
+        selection: SelectionPolicy | None = None,
+    ) -> list[ArtifactEnvelope]:
+        """Get artifacts overlapping a time span."""
+        pass
+
+    @abstractmethod
+    def delete(self, artifact_id: str) -> bool:
+        """Delete an artifact."""
         pass
