@@ -191,16 +191,16 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Validates: Requirements 16.2**
 
 - [ ] 12. OCR Text Detection Artifact Integration
-- [ ] 12.1 Update OCR service to create ocr.text artifacts
+- [x] 12.1 Update OCR service to create ocr.text artifacts
   - Modify EasyOCR integration to use ArtifactRepository
   - _Requirements: 17.2, 17.3_
 
-- [ ] 12.2 Create Alembic migration for ocr_fts projection table
+- [x] 12.2 Create Alembic migration for ocr_fts projection table
   - Create table with tsvector column
   - Add GIN index on text_tsv
   - _Requirements: 21.1_
 
-- [ ] 12.3 Implement ocr_fts projection synchronization
+- [x] 12.3 Implement ocr_fts projection synchronization
   - _Requirements: 21.2_
 
 - [ ]* 12.4 Write property test for artifact storage (OCR)
