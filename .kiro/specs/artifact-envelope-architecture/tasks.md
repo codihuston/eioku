@@ -103,7 +103,7 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - get_default_policy() method
   - _Requirements: 6.2_
 
-- [ ] 6. Checkpoint - Core Infrastructure Complete
+- [x] 6. Checkpoint - Core Infrastructure Complete
 - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Transcript Artifact Integration
