@@ -70,5 +70,13 @@ tmp
 *.m4v
 test-videos/
 
-# YOLO Models
+# Model files and datasets
 *.pt
+*.pth
+*.pth.tar
+*.onnx
+*.h5
+*.pb
+*.tflite
+backend/models/
+backend/categories_places365.txt
