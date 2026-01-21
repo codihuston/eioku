@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from ..domain.artifacts import Run
 from ..domain.models import Task
 from ..utils.print_logger import get_logger
 from .task_orchestration import TaskType
@@ -152,12 +153,17 @@ class SceneDetectionWorker(TaskWorker):
     """Worker for scene detection tasks."""
 
     def __init__(
-        self, scene_detection_service=None, video_repository=None, scene_repository=None
+        self,
+        scene_detection_service=None,
+        video_repository=None,
+        artifact_repository=None,
+        run_repository=None,
     ):
         super().__init__(TaskType.SCENE_DETECTION)
         self.scene_detection_service = scene_detection_service
         self.video_repository = video_repository
-        self.scene_repository = scene_repository
+        self.artifact_repository = artifact_repository
+        self.run_repository = run_repository
 
     def _do_work(self, task: Task) -> dict:
         """Perform scene detection."""
@@ -171,8 +177,11 @@ class SceneDetectionWorker(TaskWorker):
         if not self.video_repository:
             raise RuntimeError("SceneDetectionWorker requires a video_repository")
 
-        if not self.scene_repository:
-            raise RuntimeError("SceneDetectionWorker requires a scene_repository")
+        if not self.artifact_repository:
+            raise RuntimeError("SceneDetectionWorker requires an artifact_repository")
+
+        if not self.run_repository:
+            raise RuntimeError("SceneDetectionWorker requires a run_repository")
 
         # Get video from repository
         logger.debug(f"Fetching video {task.video_id} from repository")
@@ -180,24 +189,51 @@ class SceneDetectionWorker(TaskWorker):
         if not video:
             raise RuntimeError(f"Video not found: {task.video_id}")
 
-        logger.info(f"Detecting scenes in {video.file_path}")
-        # Detect scenes
-        scenes = self.scene_detection_service.detect_scenes(
-            video.file_path, video.video_id
+        # Create a run for this scene detection task
+        import uuid
+        from datetime import datetime
+
+        run_id = str(uuid.uuid4())
+        run = Run(
+            run_id=run_id,
+            asset_id=video.video_id,
+            pipeline_profile="balanced",  # Default profile
+            started_at=datetime.utcnow(),
+            status="running",
         )
+        self.run_repository.create(run)
 
-        logger.info(f"Storing {len(scenes)} scenes in database")
-        # Store scenes in database
-        for scene in scenes:
-            self.scene_repository.save(scene)
+        try:
+            logger.info(f"Detecting scenes in {video.file_path}")
+            # Detect scenes and get artifacts
+            artifacts = self.scene_detection_service.detect_scenes(
+                video.file_path, video.video_id, run_id, model_profile="balanced"
+            )
 
-        # Get scene statistics
-        scene_info = self.scene_detection_service.get_scene_info(scenes)
+            logger.info(f"Storing {len(artifacts)} scene artifacts in database")
+            # Store artifacts in database
+            for artifact in artifacts:
+                self.artifact_repository.create(artifact)
 
-        logger.info(
-            f"Detected and stored {scene_info['scene_count']} scenes "
-            f"for video {task.video_id}"
-        )
+            # Mark run as completed
+            run.complete(datetime.utcnow())
+            self.run_repository.update(run)
+
+            # Get scene statistics
+            scene_info = self.scene_detection_service.get_scene_info(artifacts)
+
+            logger.info(
+                f"Detected and stored {scene_info['scene_count']} scenes "
+                f"for video {task.video_id}"
+            )
+
+            return scene_info
+
+        except Exception as e:
+            # Mark run as failed
+            run.fail(str(e), datetime.utcnow())
+            self.run_repository.update(run)
+            raise
 
         return scene_info
 

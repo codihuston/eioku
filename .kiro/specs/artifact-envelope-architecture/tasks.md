@@ -135,15 +135,15 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 8: FTS Search Correctness (partial)**
   - **Validates: Requirements 5.3, 5.4**
 
-- [ ] 8. Scene Artifact Integration
-- [ ] 8.1 Update scene detection service to create scene artifacts
+- [x] 8. Scene Artifact Integration
+- [x] 8.1 Update scene detection service to create scene artifacts
   - Modify PySceneDetect integration to use ArtifactRepository
   - _Requirements: 13.2, 13.3_
 
-- [ ] 8.2 Create Alembic migration for scene_ranges projection table
+- [x] 8.2 Create Alembic migration for scene_ranges projection table
   - _Requirements: 20.1_
 
-- [ ] 8.3 Implement scene_ranges projection synchronization
+- [x] 8.3 Implement scene_ranges projection synchronization
   - _Requirements: 20.2_
 
 - [ ]* 8.4 Write property test for artifact storage (scenes)

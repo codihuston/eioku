@@ -36,9 +36,9 @@ class ProjectionSyncService:
         try:
             if artifact.artifact_type == "transcript.segment":
                 self._sync_transcript_fts(artifact)
+            elif artifact.artifact_type == "scene":
+                self._sync_scene_ranges(artifact)
             # Add more artifact types here as they are implemented
-            # elif artifact.artifact_type == "scene":
-            #     self._sync_scene_ranges(artifact)
             # elif artifact.artifact_type == "object.detection":
             #     self._sync_object_labels(artifact)
             # etc.
@@ -125,4 +125,41 @@ class ProjectionSyncService:
 
         logger.debug(
             f"Synced transcript artifact {artifact.artifact_id} to FTS projection"
+        )
+
+    def _sync_scene_ranges(self, artifact: ArtifactEnvelope) -> None:
+        """
+        Synchronize scene artifact to scene_ranges projection.
+
+        Args:
+            artifact: The scene artifact to synchronize
+        """
+        # Parse payload to extract scene_index
+        payload = json.loads(artifact.payload_json)
+        scene_index = payload.get("scene_index", 0)
+
+        # Insert into scene_ranges projection table
+        sql = text(
+            """
+            INSERT OR REPLACE INTO scene_ranges
+                (artifact_id, asset_id, scene_index, start_ms, end_ms)
+            VALUES (:artifact_id, :asset_id, :scene_index, :start_ms, :end_ms)
+            """
+        )
+
+        self.session.execute(
+            sql,
+            {
+                "artifact_id": artifact.artifact_id,
+                "asset_id": artifact.asset_id,
+                "scene_index": scene_index,
+                "start_ms": artifact.span_start_ms,
+                "end_ms": artifact.span_end_ms,
+            },
+        )
+
+        self.session.commit()
+
+        logger.debug(
+            f"Synced scene artifact {artifact.artifact_id} to scene_ranges projection"
         )
