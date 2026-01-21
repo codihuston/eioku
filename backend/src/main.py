@@ -39,16 +39,22 @@ async def lifespan(app: FastAPI):
     """Handle application lifespan events."""
     logger.info("LIFESPAN STARTUP")
 
-    logger.info("1️⃣ Running migrations...")
+    logger.info("1️⃣ Registering artifact schemas...")
+    from src.domain.schema_initialization import register_all_schemas
+
+    register_all_schemas()
+    logger.info("✅ Artifact schemas registered")
+
+    logger.info("2️⃣ Running migrations...")
     run_migrations()
     logger.info("✅ Migrations done")
 
-    logger.info("2️⃣ Getting DB session...")
+    logger.info("3️⃣ Getting DB session...")
     session = next(get_db())
     logger.info("✅ DB session obtained")
 
     try:
-        logger.info("3️⃣ Loading config...")
+        logger.info("4️⃣ Loading config...")
         path_repo = SQLAlchemyPathConfigRepository(session)
         path_manager = PathConfigManager(path_repo)
         config_loader = ConfigLoader(path_manager)
@@ -56,7 +62,7 @@ async def lifespan(app: FastAPI):
         config_loader.load_initial_config(config_path)
         logger.info("✅ Config loaded")
 
-        logger.info("4️⃣ Importing services...")
+        logger.info("5️⃣ Importing services...")
         from src.repositories.task_repository import SQLAlchemyTaskRepository
         from src.repositories.video_repository import SqlVideoRepository
         from src.services.task_orchestration import TaskType
@@ -67,22 +73,22 @@ async def lifespan(app: FastAPI):
 
         logger.info("✅ Services imported")
 
-        logger.info("5️⃣ Creating repositories...")
+        logger.info("6️⃣ Creating repositories...")
         video_repo = SqlVideoRepository(session)
         task_repo = SQLAlchemyTaskRepository(session)
         orchestrator = TaskOrchestrator(task_repo, video_repo)
         logger.info("✅ Repositories created")
 
-        logger.info("6️⃣ Running auto-discovery...")
+        logger.info("7️⃣ Running auto-discovery...")
         discovery_service = VideoDiscoveryService(path_manager, video_repo)
         discovered_videos = discovery_service.discover_videos()
         logger.info(f"✅ Discovered {len(discovered_videos)} videos")
 
-        logger.info("7️⃣ Creating tasks for discovered videos...")
+        logger.info("8️⃣ Creating tasks for discovered videos...")
         tasks_created = orchestrator.process_discovered_videos()
         logger.info(f"✅ Created {tasks_created} tasks for discovered videos")
 
-        logger.info("8️⃣ Loading pending tasks from database...")
+        logger.info("9️⃣ Loading pending tasks from database...")
         # Load all pending tasks and enqueue them
         pending_tasks = task_repo.find_by_status("pending")
         for task in pending_tasks:
@@ -91,7 +97,7 @@ async def lifespan(app: FastAPI):
             orchestrator.task_queues.enqueue(task, priority)
         logger.info(f"✅ Loaded {len(pending_tasks)} pending tasks into queues")
 
-        logger.info("9️⃣ Loading processing profile...")
+        logger.info("🔟 Loading processing profile...")
         from dataclasses import asdict
 
         from src.services.processing_profiles import ProfileManager
@@ -106,18 +112,18 @@ async def lifespan(app: FastAPI):
             f"   - Sample rate: {profile.task_settings.frame_sampling_interval}"
         )
 
-        logger.info("🔟 Creating worker pool manager...")
+        logger.info("1️⃣1️⃣ Creating worker pool manager...")
         pool_manager = WorkerPoolManager(orchestrator, task_settings_dict)
         logger.info("✅ Pool manager created")
 
-        logger.info("1️⃣1️⃣ Adding worker pools from profile...")
+        logger.info("1️⃣2️⃣ Adding worker pools from profile...")
         for task_type_str, worker_config in profile.worker_configs.items():
             pool_manager.add_worker_pool(worker_config)
             logger.info(
                 f"✅ Added {task_type_str} pool: {worker_config.worker_count} workers"
             )
 
-        logger.info("1️⃣2️⃣ Starting all worker pools...")
+        logger.info("1️⃣3️⃣ Starting all worker pools...")
         pool_manager.start_all()
         logger.info("✅ Worker pools started")
 

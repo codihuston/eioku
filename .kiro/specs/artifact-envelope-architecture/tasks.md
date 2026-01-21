@@ -23,13 +23,13 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - Add primary key on (asset_id, artifact_type)
   - _Requirements: 6.1_
 
-- [ ] 2. Core Artifact Infrastructure
-- [ ] 2.1 Implement ArtifactEnvelope domain model
+- [x] 2. Core Artifact Infrastructure
+- [x] 2.1 Implement ArtifactEnvelope domain model
   - Create dataclass with all envelope fields
   - Add validation for required fields
   - _Requirements: 1.1, 12.1, 12.2, 12.3_
 
-- [ ] 2.2 Implement SchemaRegistry
+- [x] 2.2 Implement SchemaRegistry
   - Create registry class with register/get_schema methods
   - Add validation method using Pydantic
   - Raise SchemaNotFoundError for unregistered schemas
@@ -39,7 +39,7 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 5: Schema Registry Lookup**
   - **Validates: Requirements 3.1, 3.4**
 
-- [ ] 2.4 Implement artifact type schemas (Pydantic models)
+- [x] 2.4 Implement artifact type schemas (Pydantic models)
   - TranscriptSegmentV1
   - SceneV1
   - ObjectDetectionV1
@@ -48,7 +48,7 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - OcrTextV1
   - _Requirements: 4.1, 13.1, 14.1, 15.1, 16.1, 17.1_
 
-- [ ] 2.5 Register all schemas at application startup
+- [x] 2.5 Register all schemas at application startup
   - Add schema registration to app initialization
   - _Requirements: 3.5_
 
