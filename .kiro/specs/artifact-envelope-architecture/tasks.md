@@ -181,8 +181,8 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 6: Artifact Type Storage Consistency (partial)**
   - **Validates: Requirements 15.2**
 
-- [ ] 11. Place Classification Artifact Integration
-- [ ] 11.1 Update place detection service to create place.classification artifacts
+- [x] 11. Place Classification Artifact Integration
+- [x] 11.1 Update place detection service to create place.classification artifacts
   - Modify ResNet Places365 integration to use ArtifactRepository
   - _Requirements: 16.2, 16.3_
 
