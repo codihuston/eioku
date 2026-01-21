@@ -1,4 +1,4 @@
-"""Face detection service using YOLOv8 face model."""
+"""Face detection service using YOLOv8-face."""
 
 import uuid
 from pathlib import Path
@@ -18,13 +18,13 @@ class FaceDetectionError(Exception):
 
 
 class FaceDetectionService:
-    """Service for detecting faces in video frames using YOLOv8 face model."""
+    """Service for detecting faces in video frames using YOLOv8-face."""
 
     def __init__(self, model_name: str = "yolov8n-face.pt"):
         """Initialize face detection service.
 
         Args:
-            model_name: YOLOv8 face model to use
+            model_name: YOLOv8-face model to use
                 (yolov8n-face.pt, yolov8s-face.pt, etc.)
         """
         self.model_name = model_name
@@ -32,25 +32,22 @@ class FaceDetectionService:
         self._initialize_model()
 
     def _initialize_model(self):
-        """Initialize YOLO face model."""
+        """Initialize YOLO face detection model."""
         try:
             from ultralytics import YOLO
 
-            # Use models directory if it exists, otherwise use current directory
-            model_path = Path("models") / self.model_name
-            if not model_path.exists():
-                model_path = Path(self.model_name)
-
-            logger.info(f"Loading YOLO face model from: {model_path}")
-            self.model = YOLO(str(model_path))
-            logger.info("YOLO face model loaded successfully")
+            logger.info(f"Loading YOLO face detection model: {self.model_name}")
+            self.model = YOLO(self.model_name)
+            logger.info("YOLO face detection model loaded successfully")
         except ImportError as e:
             raise FaceDetectionError(
                 "ultralytics package not installed. "
                 "Install with: pip install ultralytics"
             ) from e
         except Exception as e:
-            raise FaceDetectionError(f"Failed to load YOLO face model: {e}") from e
+            raise FaceDetectionError(
+                f"Failed to load YOLO face detection model: {e}"
+            ) from e
 
     def detect_faces_in_video(
         self, video_path: str, video_id: str, sample_rate: int = 30
@@ -65,7 +62,6 @@ class FaceDetectionService:
 
         Returns:
             List of Face domain models with detections
-            (single Face object with all detections)
         """
         if not Path(video_path).exists():
             raise FaceDetectionError(f"Video file not found: {video_path}")
@@ -89,11 +85,9 @@ class FaceDetectionService:
         frame_idx = 0
         processed_frames = 0
 
-        # Aggregate all face detections into single list
-        all_timestamps = []
-        all_bounding_boxes = []
-        confidence_sum = 0.0
-        detection_count = 0
+        # Dictionary to aggregate detections by person_id (cluster)
+        # person_id -> {timestamps: [], bounding_boxes: [], confidences: []}
+        detections_by_person = {}
 
         try:
             for frame in container.decode(video=0):
@@ -103,27 +97,13 @@ class FaceDetectionService:
                     img = frame.to_ndarray(format="rgb24")
 
                     timestamp = frame_idx / fps if fps > 0 else frame_idx
-                    self._process_frame(
-                        img,
-                        timestamp,
-                        all_timestamps,
-                        all_bounding_boxes,
-                        frame_idx,
-                    )
-
-                    # Update confidence tracking
-                    if all_bounding_boxes:
-                        # Get confidence from last added bounding box
-                        last_conf = all_bounding_boxes[-1]["confidence"]
-                        confidence_sum += last_conf
-                        detection_count += 1
-
+                    self._process_frame(img, timestamp, detections_by_person, frame_idx)
                     processed_frames += 1
 
                     if processed_frames % 100 == 0:
                         logger.debug(
                             f"Processed {processed_frames} frames, "
-                            f"found {len(all_timestamps)} face detections"
+                            f"found {len(detections_by_person)} unique faces"
                         )
 
                 frame_idx += 1
@@ -133,24 +113,25 @@ class FaceDetectionService:
 
         logger.info(
             f"Face detection complete. Processed {processed_frames} frames, "
-            f"found {len(all_timestamps)} face detections"
+            f"found {len(detections_by_person)} unique face clusters"
         )
 
-        # Calculate average confidence
-        avg_confidence = (
-            confidence_sum / detection_count if detection_count > 0 else 0.0
-        )
-
-        # Create single Face object with all detections
-        # person_id is None (no clustering yet - Phase 2)
+        # Convert aggregated detections to Face domain models
         faces = []
-        if all_timestamps:
+        for person_id, data in detections_by_person.items():
+            # Calculate average confidence
+            avg_confidence = (
+                sum(data["confidences"]) / len(data["confidences"])
+                if data["confidences"]
+                else 0.0
+            )
+
             face = Face(
                 face_id=str(uuid.uuid4()),
                 video_id=video_id,
-                person_id=None,  # No clustering yet (Phase 2)
-                timestamps=all_timestamps,
-                bounding_boxes=all_bounding_boxes,
+                person_id=person_id,
+                timestamps=data["timestamps"],
+                bounding_boxes=data["bounding_boxes"],
                 confidence=avg_confidence,
             )
             faces.append(face)
@@ -161,31 +142,40 @@ class FaceDetectionService:
         self,
         frame,
         timestamp: float,
-        all_timestamps: list,
-        all_bounding_boxes: list,
+        detections_by_person: dict,
         frame_idx: int,
     ):
-        """Process a single frame and aggregate face detections.
+        """Process a single frame and aggregate detections.
 
         Args:
             frame: Video frame (numpy array)
             timestamp: Timestamp in seconds
-            all_timestamps: List to append timestamps
-            all_bounding_boxes: List to append bounding boxes
+            detections_by_person: Dictionary to aggregate detections
             frame_idx: Frame index for logging
         """
         try:
             results = self.model(frame, verbose=False)
 
             for r in results:
-                for box in r.boxes:
-                    # YOLOv8 face model typically has single class (face)
+                for idx, box in enumerate(r.boxes):
                     xyxy = box.xyxy[0].tolist()
                     conf = float(box.conf[0])
 
-                    # Add detection to aggregated lists
-                    all_timestamps.append(timestamp)
-                    all_bounding_boxes.append(
+                    # For now, use detection index as person_id
+                    # In production, this would be replaced with face clustering
+                    person_id = f"face_{idx}"
+
+                    # Initialize person entry if first occurrence
+                    if person_id not in detections_by_person:
+                        detections_by_person[person_id] = {
+                            "timestamps": [],
+                            "bounding_boxes": [],
+                            "confidences": [],
+                        }
+
+                    # Add detection
+                    detections_by_person[person_id]["timestamps"].append(timestamp)
+                    detections_by_person[person_id]["bounding_boxes"].append(
                         {
                             "frame": frame_idx,
                             "timestamp": timestamp,
@@ -193,6 +183,7 @@ class FaceDetectionService:
                             "confidence": conf,
                         }
                     )
+                    detections_by_person[person_id]["confidences"].append(conf)
 
         except Exception as e:
             logger.warning(f"Error processing frame {frame_idx}: {e}")

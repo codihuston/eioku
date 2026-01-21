@@ -225,3 +225,44 @@ class TestProjectionSyncService:
         assert params["confidence"] == 0.92
         assert params["start_ms"] == 1000
         assert params["end_ms"] == 1001
+
+    def test_sync_face_detection_artifact(self):
+        """Test syncing face.detection artifact to face_clusters projection."""
+        # Create face detection artifact
+        face_artifact = ArtifactEnvelope(
+            artifact_id="face_123",
+            asset_id="video_123",
+            artifact_type="face.detection",
+            schema_version=1,
+            span_start_ms=2000,
+            span_end_ms=2001,
+            payload_json=(
+                '{"confidence": 0.95, '
+                '"bounding_box": {"x": 250, "y": 100, "width": 150, "height": 180}, '
+                '"cluster_id": "person_001", "frame_number": 60}'
+            ),
+            producer="yolo-face",
+            producer_version="yolov8n-face.pt",
+            model_profile="fast",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_123",
+            created_at=datetime.utcnow(),
+        )
+
+        # Sync artifact
+        self.service.sync_artifact(face_artifact)
+
+        # Verify SQL was executed
+        assert self.mock_session.execute.called
+        assert self.mock_session.commit.called
+
+        # Verify the SQL contains the expected data
+        call_args = self.mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["artifact_id"] == "face_123"
+        assert params["asset_id"] == "video_123"
+        assert params["cluster_id"] == "person_001"
+        assert params["confidence"] == 0.95
+        assert params["start_ms"] == 2000
+        assert params["end_ms"] == 2001

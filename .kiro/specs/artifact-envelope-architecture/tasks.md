@@ -166,15 +166,15 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 6: Artifact Type Storage Consistency (partial)**
   - **Validates: Requirements 14.2**
 
-- [ ] 10. Face Detection Artifact Integration
-- [ ] 10.1 Update face detection service to create face.detection artifacts
+- [x] 10. Face Detection Artifact Integration
+- [x] 10.1 Update face detection service to create face.detection artifacts
   - Modify face detection integration to use ArtifactRepository
   - _Requirements: 15.2, 15.3_
 
-- [ ] 10.2 Create Alembic migration for face_clusters projection table
+- [x] 10.2 Create Alembic migration for face_clusters projection table
   - _Requirements: 19.1_
 
-- [ ] 10.3 Implement face_clusters projection synchronization
+- [x] 10.3 Implement face_clusters projection synchronization
   - _Requirements: 19.2_
 
 - [ ]* 10.4 Write property test for artifact storage (faces)
