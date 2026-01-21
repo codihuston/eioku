@@ -92,12 +92,12 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 4: Run Lifecycle Tracking**
   - **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5**
 
-- [ ] 5. Selection Policy Manager
-- [ ] 5.1 Implement SelectionPolicy domain model
+- [x] 5. Selection Policy Manager
+- [x] 5.1 Implement SelectionPolicy domain model
   - Create dataclass with all policy fields
   - _Requirements: 6.1_
 
-- [ ] 5.2 Implement SelectionPolicyManager
+- [x] 5.2 Implement SelectionPolicyManager
   - get_policy() method
   - set_policy() method
   - get_default_policy() method
