@@ -40,10 +40,13 @@ class ProjectionSyncService:
                 self._sync_scene_ranges(artifact)
             elif artifact.artifact_type == "object.detection":
                 self._sync_object_labels(artifact)
+            elif artifact.artifact_type == "face.detection":
+                self._sync_face_clusters(artifact)
             # Add more artifact types here as they are implemented
-            # elif artifact.artifact_type == "face.detection":
-            #     self._sync_face_clusters(artifact)
-            # etc.
+            # elif artifact.artifact_type == "place.classification":
+            #     self._sync_place_labels(artifact)
+            # elif artifact.artifact_type == "ocr.text":
+            #     self._sync_ocr_fts(artifact)
 
         except Exception as e:
             error_msg = (
@@ -204,4 +207,47 @@ class ProjectionSyncService:
         logger.debug(
             f"Synced object.detection artifact {artifact.artifact_id} "
             f"to object_labels projection (label={label})"
+        )
+
+    def _sync_face_clusters(self, artifact: ArtifactEnvelope) -> None:
+        """
+        Synchronize face.detection artifact to face_clusters projection.
+
+        Args:
+            artifact: The face.detection artifact to synchronize
+        """
+        # Parse payload to extract cluster_id and confidence
+        payload = json.loads(artifact.payload_json)
+        cluster_id = payload.get("cluster_id")
+        confidence = payload.get("confidence", 0.0)
+
+        # Insert into face_clusters projection table
+        sql = text(
+            """
+            INSERT OR REPLACE INTO face_clusters
+                (artifact_id, asset_id, cluster_id, confidence,
+                 start_ms, end_ms)
+            VALUES (:artifact_id, :asset_id, :cluster_id, :confidence,
+                    :start_ms, :end_ms)
+            """
+        )
+
+        self.session.execute(
+            sql,
+            {
+                "artifact_id": artifact.artifact_id,
+                "asset_id": artifact.asset_id,
+                "cluster_id": cluster_id,
+                "confidence": confidence,
+                "start_ms": artifact.span_start_ms,
+                "end_ms": artifact.span_end_ms,
+            },
+        )
+
+        self.session.commit()
+
+        logger.debug(
+            f"Synced face.detection artifact {artifact.artifact_id} "
+            f"to face_clusters projection "
+            f"(cluster_id={cluster_id})"
         )

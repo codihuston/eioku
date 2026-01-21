@@ -184,3 +184,18 @@ class ObjectLabel(Base):
     confidence = Column(Float, nullable=False, index=True)
     start_ms = Column(Integer, nullable=False)
     end_ms = Column(Integer, nullable=False)
+
+
+class FaceCluster(Base):
+    """SQLAlchemy entity for face_clusters projection table."""
+
+    __tablename__ = "face_clusters"
+
+    artifact_id = Column(
+        String, ForeignKey("artifacts.artifact_id"), nullable=False, primary_key=True
+    )
+    asset_id = Column(String, nullable=False, index=True)
+    cluster_id = Column(String, index=True)
+    confidence = Column(Float, nullable=False, index=True)
+    start_ms = Column(Integer, nullable=False)
+    end_ms = Column(Integer, nullable=False)
