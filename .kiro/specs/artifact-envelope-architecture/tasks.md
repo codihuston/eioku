@@ -166,15 +166,15 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 6: Artifact Type Storage Consistency (partial)**
   - **Validates: Requirements 14.2**
 
-- [x] 10. Face Detection Artifact Integration
-- [x] 10.1 Update face detection service to create face.detection artifacts
+- [ ] 10. Face Detection Artifact Integration
+- [ ] 10.1 Update face detection service to create face.detection artifacts
   - Modify face detection integration to use ArtifactRepository
   - _Requirements: 15.2, 15.3_
 
-- [x] 10.2 Create Alembic migration for face_clusters projection table
+- [ ] 10.2 Create Alembic migration for face_clusters projection table
   - _Requirements: 19.1_
 
-- [x] 10.3 Implement face_clusters projection synchronization
+- [ ] 10.3 Implement face_clusters projection synchronization
   - _Requirements: 19.2_
 
 - [ ]* 10.4 Write property test for artifact storage (faces)
@@ -280,12 +280,12 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 14: Multi-Profile Preservation**
   - **Validates: Requirements 11.1, 11.4**
 
-- [x] 18. Legacy Data Access
-- [x] 18.1 Add legacy flag to existing API responses
+- [ ] 18. Legacy Data Access
+- [ ] 18.1 Add legacy flag to existing API responses
   - Modify legacy endpoints to indicate data source
   - _Requirements: 10.3_
 
-- [x] 18.2 Document which videos have artifact vs legacy data
+- [ ] 18.2 Document which videos have artifact vs legacy data
   - Add metadata field to video model
   - _Requirements: 10.5_
 
@@ -293,70 +293,34 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 13: Legacy Data Access**
   - **Validates: Requirements 10.1, 10.2, 10.3**
 
-- [x] 19. Worker Pool Session Isolation and Batch Operations (Bug Fix)
-- [x] 19.1 Add batch_create method to ArtifactRepository
-  - Implement batch_create(artifacts: list[ArtifactEnvelope]) method
-  - Validate all artifacts before inserting any
-  - Use single transaction for all inserts
-  - Rollback entire batch on any validation error
-  - _Requirements: 7.1 (Repository CRUD operations)_
-
-- [x] 19.2 Update worker pool to use per-worker session instances
-  - Move session creation inside worker loop (not shared across workers)
-  - Create new session at start of each task processing
-  - Ensure session is closed after each task completes
-  - Add proper exception handling with session rollback
-  - _Requirements: 2.1 (Run tracking and error handling)_
-
-- [x] 19.3 Update task handlers to use batch artifact creation
-  - Modify WhisperTranscriptionService to collect all segments before insert
-  - Modify ObjectDetectionService to batch all detections
-  - Modify FaceDetectionService to batch all detections
-  - Modify PlaceClassificationService to batch all classifications
-  - Modify OcrService to batch all text detections
-  - Use repository.batch_create() instead of individual creates
-  - _Requirements: 4.2, 13.2, 14.2, 15.2, 16.2, 17.2_
-
-- [ ]* 19.4 Write integration test for worker isolation
-  - Test that one worker's session failure doesn't affect other workers
-  - Simulate artifact validation error in one worker
-  - Verify other workers continue processing successfully
-  - _Requirements: 2.4 (Run failure handling)_
-
-- [ ]* 19.5 Write unit test for batch artifact creation
-  - Test successful batch insert of multiple artifacts
-  - Test rollback when one artifact fails validation
-  - Test that no artifacts are inserted if any fail
-  - _Requirements: 7.1, 1.2 (Repository operations and validation)_
-
-- [x] 20. Final Integration and Testing
-- [x] 20.1 Update worker pool manager to use artifact-based services
+- [ ] 19. Final Integration and Testing
+- [ ] 19.1 Update worker pool manager to use artifact-based services
   - Wire up all new services
   - Remove legacy service calls
 
-- [x] 20.2 Run full integration test suite
+- [ ] 19.2 Run full integration test suite
   - Process test video through all pipelines
   - Verify artifacts created correctly
   - Verify projections synchronized
   - Verify API endpoints return correct data
 
-- [x] 20.3 Performance testing
+- [ ] 19.3 Performance testing
   - Test query performance on large artifact sets
   - Verify indexes are being used
   - Monitor database size growth
 
-- [ ] 21. Documentation
-- [ ] 21.1 Update API documentation
+- [ ] 20. Documentation
+- [ ] 20.1 Update API documentation
   - Document new endpoints
   - Document selection policy usage
   - Document multi-profile support
 
-- [ ] 21.2 Create developer guide for adding new artifact types
+- [ ] 20.2 Create developer guide for adding new artifact types
   - Schema registration process
   - Projection creation
   - Service integration
 
-- [ ] 22. Final Checkpoint
+- [ ] 21. Final Checkpoint
 - Ensure all tests pass, verify performance meets requirements, ask the user if ready for deployment.
 
 ## Notes
