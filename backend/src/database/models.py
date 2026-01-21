@@ -155,3 +155,17 @@ class ArtifactSelection(Base):
     updated_at = Column(
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
     )
+
+
+class SceneRange(Base):
+    """SQLAlchemy entity for scene_ranges projection table."""
+
+    __tablename__ = "scene_ranges"
+
+    artifact_id = Column(
+        String, ForeignKey("artifacts.artifact_id"), nullable=False, primary_key=True
+    )
+    asset_id = Column(String, nullable=False, index=True)
+    scene_index = Column(Integer, nullable=False, index=True)
+    start_ms = Column(Integer, nullable=False)
+    end_ms = Column(Integer, nullable=False)
