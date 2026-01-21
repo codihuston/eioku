@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..database.models import Artifact as ArtifactEntity
 from ..domain.artifacts import ArtifactEnvelope, SelectionPolicy
 from ..domain.schema_registry import SchemaRegistry
+from ..services.projection_sync_service import ProjectionSyncService
 from .interfaces import ArtifactRepository
 
 logger = logging.getLogger(__name__)
@@ -16,9 +17,17 @@ logger = logging.getLogger(__name__)
 class SqlArtifactRepository(ArtifactRepository):
     """SQLAlchemy implementation of ArtifactRepository."""
 
-    def __init__(self, session: Session, schema_registry: SchemaRegistry):
+    def __init__(
+        self,
+        session: Session,
+        schema_registry: SchemaRegistry,
+        projection_sync_service: ProjectionSyncService | None = None,
+    ):
         self.session = session
         self.schema_registry = schema_registry
+        self.projection_sync_service = projection_sync_service or ProjectionSyncService(
+            session
+        )
 
     def create(self, artifact: ArtifactEnvelope) -> ArtifactEnvelope:
         """Create a new artifact with schema validation."""
@@ -45,6 +54,17 @@ class SqlArtifactRepository(ArtifactRepository):
             f"Created artifact: {artifact.artifact_id}, "
             f"type: {artifact.artifact_type}, run: {artifact.run_id}"
         )
+
+        # Synchronize to projection tables
+        try:
+            self.projection_sync_service.sync_artifact(artifact)
+            logger.debug(f"Synced artifact {artifact.artifact_id} to projections")
+        except Exception as e:
+            # Log error but don't fail the artifact creation
+            # Projections can be rebuilt later if needed
+            logger.error(
+                f"Failed to sync projection for artifact {artifact.artifact_id}: {e}"
+            )
 
         return self._to_domain(entity)
 
