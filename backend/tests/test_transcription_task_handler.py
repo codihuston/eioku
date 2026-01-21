@@ -154,20 +154,17 @@ class TestTranscriptionTaskHandler:
         mock_artifacts = [
             Mock(
                 payload_json=(
-                    '{"text": "Hello world", '
-                    '"confidence": 0.9, "language": "en"}'
+                    '{"text": "Hello world", ' '"confidence": 0.9, "language": "en"}'
                 )
             ),
             Mock(
                 payload_json=(
-                    '{"text": "How are you", '
-                    '"confidence": 0.8, "language": "en"}'
+                    '{"text": "How are you", ' '"confidence": 0.8, "language": "en"}'
                 )
             ),
             Mock(
                 payload_json=(
-                    '{"text": "I am fine", '
-                    '"confidence": 0.85, "language": "en"}'
+                    '{"text": "I am fine", ' '"confidence": 0.85, "language": "en"}'
                 )
             ),
         ]
@@ -185,20 +182,17 @@ class TestTranscriptionTaskHandler:
         mock_artifacts = [
             Mock(
                 payload_json=(
-                    '{"text": "Hello world", '
-                    '"confidence": 0.9, "language": "en"}'
+                    '{"text": "Hello world", ' '"confidence": 0.9, "language": "en"}'
                 )
             ),
             Mock(
                 payload_json=(
-                    '{"text": "How are you", '
-                    '"confidence": 0.8, "language": "en"}'
+                    '{"text": "How are you", ' '"confidence": 0.8, "language": "en"}'
                 )
             ),
             Mock(
                 payload_json=(
-                    '{"text": "Goodbye world", '
-                    '"confidence": 0.85, "language": "en"}'
+                    '{"text": "Goodbye world", ' '"confidence": 0.85, "language": "en"}'
                 )
             ),
         ]

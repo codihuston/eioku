@@ -38,9 +38,11 @@ class ProjectionSyncService:
                 self._sync_transcript_fts(artifact)
             elif artifact.artifact_type == "scene":
                 self._sync_scene_ranges(artifact)
+            elif artifact.artifact_type == "object.detection":
+                self._sync_object_labels(artifact)
             # Add more artifact types here as they are implemented
-            # elif artifact.artifact_type == "object.detection":
-            #     self._sync_object_labels(artifact)
+            # elif artifact.artifact_type == "face.detection":
+            #     self._sync_face_clusters(artifact)
             # etc.
 
         except Exception as e:
@@ -162,4 +164,44 @@ class ProjectionSyncService:
 
         logger.debug(
             f"Synced scene artifact {artifact.artifact_id} to scene_ranges projection"
+        )
+
+    def _sync_object_labels(self, artifact: ArtifactEnvelope) -> None:
+        """
+        Synchronize object.detection artifact to object_labels projection.
+
+        Args:
+            artifact: The object.detection artifact to synchronize
+        """
+        # Parse payload to extract label and confidence
+        payload = json.loads(artifact.payload_json)
+        label = payload.get("label", "")
+        confidence = payload.get("confidence", 0.0)
+
+        # Insert into object_labels projection table
+        sql = text(
+            """
+            INSERT OR REPLACE INTO object_labels
+                (artifact_id, asset_id, label, confidence, start_ms, end_ms)
+            VALUES (:artifact_id, :asset_id, :label, :confidence, :start_ms, :end_ms)
+            """
+        )
+
+        self.session.execute(
+            sql,
+            {
+                "artifact_id": artifact.artifact_id,
+                "asset_id": artifact.asset_id,
+                "label": label,
+                "confidence": confidence,
+                "start_ms": artifact.span_start_ms,
+                "end_ms": artifact.span_end_ms,
+            },
+        )
+
+        self.session.commit()
+
+        logger.debug(
+            f"Synced object.detection artifact {artifact.artifact_id} "
+            f"to object_labels projection (label={label})"
         )

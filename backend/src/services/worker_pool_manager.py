@@ -506,8 +506,10 @@ class WorkerPool:
 
             return create_scene_detection_worker
         elif self.config.task_type == TaskType.OBJECT_DETECTION:
-            from ..repositories.object_repository import SqlObjectRepository
+            from ..domain.schema_registry import SchemaRegistry
+            from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
+            from ..services.projection_sync_service import ProjectionSyncService
             from .object_detection_service import ObjectDetectionService
             from .object_detection_task_handler import ObjectDetectionTaskHandler
 
@@ -518,10 +520,15 @@ class WorkerPool:
             # Create object detection worker with dependencies
             def create_object_detection_worker(session):
                 video_repo = SqlVideoRepository(session)
-                object_repo = SqlObjectRepository(session)
+                schema_registry = SchemaRegistry()
+                projection_sync = ProjectionSyncService(session)
+                artifact_repo = SqlArtifactRepository(
+                    session, schema_registry, projection_sync
+                )
                 detection_service = ObjectDetectionService(model_name=model_name)
                 detection_handler = ObjectDetectionTaskHandler(
-                    object_repository=object_repo,
+                    artifact_repository=artifact_repo,
+                    schema_registry=schema_registry,
                     detection_service=detection_service,
                     model_name=model_name,
                     sample_rate=sample_rate,
