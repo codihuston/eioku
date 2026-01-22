@@ -11,7 +11,6 @@ from ..domain.models import Task, Video
 from ..domain.schema_registry import SchemaRegistry
 from ..domain.schemas.object_detection_v1 import BoundingBox, ObjectDetectionV1
 from ..repositories.interfaces import ArtifactRepository
-from .object_detection_service import ObjectDetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,6 @@ class ObjectDetectionTaskHandler:
         self,
         artifact_repository: ArtifactRepository,
         schema_registry: SchemaRegistry,
-        detection_service: ObjectDetectionService | None = None,
         model_name: str = "yolov8n.pt",
         sample_rate: int = 30,
     ):
@@ -31,9 +29,14 @@ class ObjectDetectionTaskHandler:
         self.schema_registry = schema_registry
         self.model_name = model_name
         self.sample_rate = sample_rate
-        self.detection_service = detection_service or ObjectDetectionService(
-            model_name=model_name
-        )
+        self.model = None  # Lazy load
+
+    def _load_model(self):
+        """Lazy load the YOLO model."""
+        if self.model is None:
+            from ultralytics import YOLO
+            logger.info(f"Loading YOLO object detection model: {self.model_name}")
+            self.model = YOLO(self.model_name)
 
     def _compute_config_hash(self, config: dict) -> str:
         """Compute hash of configuration for provenance tracking."""
@@ -82,15 +85,57 @@ class ObjectDetectionTaskHandler:
                 run_id = str(uuid.uuid4())
                 logger.info(f"Generated run_id: {run_id}")
 
-            # Detect objects in video using configured sample rate
-            # This returns the old Object domain models with aggregated detections
-            legacy_objects = self.detection_service.detect_objects_in_video(
-                video_path=video.file_path,
-                video_id=video.video_id,
-                sample_rate=self.sample_rate,
-            )
+            # Lazy load model
+            self._load_model()
 
-            logger.info(f"Detected {len(legacy_objects)} unique object types")
+            # Detect objects in video using YOLO directly
+            import cv2
+            
+            cap = cv2.VideoCapture(video.file_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            
+            # Group detections by label for aggregation
+            detections_by_label = {}
+            
+            frame_idx = 0
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Sample frames based on sample_rate
+                if frame_idx % self.sample_rate == 0:
+                    # Run YOLO detection
+                    results = self.model(frame, verbose=False)
+                    
+                    # Process detections
+                    for result in results:
+                        boxes = result.boxes
+                        for box in boxes:
+                            # Get detection info
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            confidence = float(box.conf[0].cpu().numpy())
+                            class_id = int(box.cls[0].cpu().numpy())
+                            label = self.model.names[class_id]
+                            
+                            # Store detection
+                            if label not in detections_by_label:
+                                detections_by_label[label] = []
+                            
+                            timestamp_sec = frame_idx / fps
+                            detections_by_label[label].append({
+                                "frame": frame_idx,
+                                "timestamp": timestamp_sec,
+                                "bbox": [float(x1), float(y1), float(x2), float(y2)],
+                                "confidence": confidence,
+                            })
+                
+                frame_idx += 1
+            
+            cap.release()
+            
+            logger.info(f"Detected {len(detections_by_label)} unique object types")
 
             # Compute provenance hashes
             config = {
@@ -104,12 +149,12 @@ class ObjectDetectionTaskHandler:
             if model_profile is None:
                 model_profile = self._determine_model_profile(self.model_name)
 
-            # Convert legacy aggregated objects to individual artifact envelopes
+            # Convert detections to individual artifact envelopes
             # Create one artifact per detection (frame-level granularity)
             saved_count = 0
-            for legacy_obj in legacy_objects:
-                # Each legacy object has multiple bounding boxes (one per frame)
-                for bbox_data in legacy_obj.bounding_boxes:
+            for label, bbox_list in detections_by_label.items():
+                # Each label has multiple bounding boxes (one per frame)
+                for bbox_data in bbox_list:
                     frame_number = bbox_data["frame"]
                     timestamp_sec = bbox_data["timestamp"]
                     bbox_coords = bbox_data["bbox"]  # [x1, y1, x2, y2]
@@ -121,7 +166,7 @@ class ObjectDetectionTaskHandler:
 
                     # Create payload using Pydantic schema
                     payload = ObjectDetectionV1(
-                        label=legacy_obj.label,
+                        label=label,
                         confidence=confidence,
                         bounding_box=bbox,
                         frame_number=frame_number,

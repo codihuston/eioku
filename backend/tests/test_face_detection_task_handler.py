@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.domain.artifacts import ArtifactEnvelope
-from src.domain.models import Face, Task, Video
+from src.domain.models import Task, Video
 from src.domain.schema_registry import SchemaRegistry
 from src.services.face_detection_task_handler import FaceDetectionTaskHandler
 
@@ -28,29 +28,30 @@ class TestFaceDetectionTaskHandler:
     def mock_detection_service(self):
         """Create mock face detection service."""
         service = Mock()
-        # Create a mock Face with bounding boxes
-        mock_face = Face(
-            face_id="face-1",
-            video_id="video-123",
-            person_id="person_001",
-            timestamps=[1.0, 2.0],
-            bounding_boxes=[
-                {
-                    "frame": 30,
-                    "timestamp": 1.0,
-                    "bbox": [100.0, 150.0, 200.0, 250.0],
-                    "confidence": 0.95,
-                },
-                {
-                    "frame": 60,
-                    "timestamp": 2.0,
-                    "bbox": [110.0, 160.0, 210.0, 260.0],
-                    "confidence": 0.92,
-                },
-            ],
-            confidence=0.935,
-        )
-        service.detect_faces_in_video = Mock(return_value=[mock_face])
+        
+        # Mock service returns frame-level detections
+        service.detect_faces_in_video = Mock(return_value=[
+            {
+                "frame_number": 30,
+                "timestamp": 1.0,
+                "detections": [
+                    {
+                        "bbox": [100.0, 150.0, 200.0, 250.0],
+                        "confidence": 0.95,
+                    }
+                ]
+            },
+            {
+                "frame_number": 60,
+                "timestamp": 2.0,
+                "detections": [
+                    {
+                        "bbox": [110.0, 160.0, 210.0, 260.0],
+                        "confidence": 0.92,
+                    }
+                ]
+            },
+        ])
         return service
 
     @pytest.fixture
@@ -90,10 +91,9 @@ class TestFaceDetectionTaskHandler:
         assert result is True
         mock_detection_service.detect_faces_in_video.assert_called_once_with(
             video_path="/path/to/video.mp4",
-            video_id="video-123",
             sample_rate=30,
         )
-        # Should create 2 artifacts (one per bounding box)
+        # Should create 2 artifacts (one per detection)
         assert mock_artifact_repository.create.call_count == 2
 
         # Verify first artifact
@@ -112,7 +112,8 @@ class TestFaceDetectionTaskHandler:
         assert "bounding_box" in payload
         assert "cluster_id" in payload
         assert "frame_number" in payload
-        assert payload["cluster_id"] == "person_001"
+        # Cluster ID is auto-generated now, just verify it exists
+        assert payload["cluster_id"].startswith("face_")
 
     def test_process_face_detection_task_generates_run_id(
         self, handler, mock_artifact_repository, mock_detection_service

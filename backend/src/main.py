@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 
@@ -125,8 +126,12 @@ async def lifespan(app: FastAPI):
             )
 
         logger.info("1️⃣3️⃣ Starting all worker pools...")
-        pool_manager.start_all()
-        logger.info("✅ Worker pools started")
+        # Skip starting workers in test mode
+        if os.getenv("TESTING") != "true":
+            pool_manager.start_all()
+            logger.info("✅ Worker pools started")
+        else:
+            logger.info("⏭️  Skipping worker pool startup (test mode)")
 
         logger.info("🏁 Storing in app state...")
         app.state.pool_manager = pool_manager

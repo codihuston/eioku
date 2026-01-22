@@ -78,6 +78,8 @@ class TestTaskOrchestrator:
             TaskType.SCENE_DETECTION,
             TaskType.OBJECT_DETECTION,
             TaskType.FACE_DETECTION,
+            TaskType.OCR,
+            TaskType.PLACE_DETECTION,
         }
         created_types = {TaskType(t.task_type) for t in tasks}
 

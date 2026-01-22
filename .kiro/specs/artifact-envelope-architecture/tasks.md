@@ -280,12 +280,12 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 14: Multi-Profile Preservation**
   - **Validates: Requirements 11.1, 11.4**
 
-- [ ] 18. Legacy Data Access
-- [ ] 18.1 Add legacy flag to existing API responses
+- [x] 18. Legacy Data Access
+- [x] 18.1 Add legacy flag to existing API responses
   - Modify legacy endpoints to indicate data source
   - _Requirements: 10.3_
 
-- [ ] 18.2 Document which videos have artifact vs legacy data
+- [x] 18.2 Document which videos have artifact vs legacy data
   - Add metadata field to video model
   - _Requirements: 10.5_
 

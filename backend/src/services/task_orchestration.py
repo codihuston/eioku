@@ -20,6 +20,8 @@ class TaskType(Enum):
     SCENE_DETECTION = "scene_detection"
     OBJECT_DETECTION = "object_detection"
     FACE_DETECTION = "face_detection"
+    OCR = "ocr"
+    PLACE_DETECTION = "place_detection"
     TOPIC_EXTRACTION = "topic_extraction"
     EMBEDDING_GENERATION = "embedding_generation"
     THUMBNAIL_GENERATION = "thumbnail_generation"
@@ -124,6 +126,8 @@ class TaskDependencyManager:
         TaskType.SCENE_DETECTION: [TaskType.HASH],
         TaskType.OBJECT_DETECTION: [TaskType.HASH],
         TaskType.FACE_DETECTION: [TaskType.HASH],
+        TaskType.OCR: [TaskType.HASH],
+        TaskType.PLACE_DETECTION: [TaskType.HASH],
         TaskType.TOPIC_EXTRACTION: [TaskType.HASH, TaskType.TRANSCRIPTION],
         TaskType.EMBEDDING_GENERATION: [TaskType.HASH, TaskType.TRANSCRIPTION],
         TaskType.THUMBNAIL_GENERATION: [TaskType.HASH, TaskType.SCENE_DETECTION],
@@ -186,6 +190,8 @@ def is_video_ready_for_task_type(video: Video, task_type: TaskType) -> bool:
         TaskType.SCENE_DETECTION,
         TaskType.OBJECT_DETECTION,
         TaskType.FACE_DETECTION,
+        TaskType.OCR,
+        TaskType.PLACE_DETECTION,
     ]:
         # Parallel tasks are ready if video is hashed
         return video.status == "hashed" and video.file_hash is not None
