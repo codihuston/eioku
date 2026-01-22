@@ -223,7 +223,7 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Validates: Requirements 8.2, 8.3, 22.1, 22.2, 22.3, 22.4, 22.5**
 
 - [ ] 15. Find Within Video Service
-- [ ] 15.1 Implement FindWithinVideoService
+- [x] 15.1 Implement FindWithinVideoService
   - find_next() method
   - find_prev() method
   - _search_transcript_fts() using PostgreSQL full-text search
