@@ -260,6 +260,93 @@ class PlaceDetectionWorker(TaskWorker):
         }
 
 
+class TranscriptionWorker(TaskWorker):
+    """Worker for transcription tasks."""
+
+    def __init__(
+        self,
+        transcription_handler,
+        video_repository: "VideoRepository",
+        model_profile: str = "balanced",
+    ):
+        super().__init__(TaskType.TRANSCRIPTION)
+        self.transcription_handler = transcription_handler
+        self.video_repository = video_repository
+        self.model_profile = model_profile
+
+    def _do_work(self, task: Task) -> dict:
+        """Perform transcription."""
+        # Get video
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise ValueError(f"Video not found: {task.video_id}")
+
+        # Generate run_id for this transcription
+        import uuid
+        run_id = str(uuid.uuid4())
+
+        # Process transcription with model_profile
+        success = self.transcription_handler.process_transcription_task(
+            task, video, run_id=run_id, model_profile=self.model_profile
+        )
+
+        if not success:
+            raise Exception("Transcription processing failed")
+
+        # Get transcription segments for response
+        segments = self.transcription_handler.get_transcription_segments(task.video_id)
+
+        return {
+            "segments_created": len(segments),
+            "run_id": run_id,
+        }
+
+
+class SceneDetectionWorker(TaskWorker):
+    """Worker for scene detection tasks."""
+
+    def __init__(
+        self,
+        scene_service,
+        artifact_repository,
+        video_repository: "VideoRepository",
+        model_profile: str = "balanced",
+    ):
+        super().__init__(TaskType.SCENE_DETECTION)
+        self.scene_service = scene_service
+        self.artifact_repository = artifact_repository
+        self.video_repository = video_repository
+        self.model_profile = model_profile
+
+    def _do_work(self, task: Task) -> dict:
+        """Perform scene detection."""
+        # Get video
+        video = self.video_repository.find_by_id(task.video_id)
+        if not video:
+            raise ValueError(f"Video not found: {task.video_id}")
+
+        # Generate run_id for this scene detection
+        import uuid
+        run_id = str(uuid.uuid4())
+
+        # Detect scenes and create artifacts
+        artifacts = self.scene_service.detect_scenes(
+            video.file_path, video.video_id, run_id, model_profile=self.model_profile
+        )
+
+        # Save artifacts to repository
+        for artifact in artifacts:
+            self.artifact_repository.create(artifact)
+
+        # Get scene info for response
+        scene_info = self.scene_service.get_scene_info(artifacts)
+
+        return {
+            "scenes_detected": scene_info["scene_count"],
+            "run_id": run_id,
+        }
+
+
 class WorkerPool:
     """Manages a pool of workers for a specific task type."""
 
@@ -452,6 +539,66 @@ class WorkerPool:
                 )
 
             return create_hash_worker
+        elif self.config.task_type == TaskType.TRANSCRIPTION:
+            from ..domain.schema_registry import SchemaRegistry
+            from ..repositories.artifact_repository import SqlArtifactRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from ..services.projection_sync_service import ProjectionSyncService
+            from .transcription_task_handler import TranscriptionTaskHandler
+
+            # Get settings from task_settings
+            model_name = self.task_settings.get("transcription_model", "base")
+
+            # Create transcription worker with dependencies
+            def create_transcription_worker(session):
+                video_repo = SqlVideoRepository(session)
+                schema_registry = SchemaRegistry()
+                projection_sync = ProjectionSyncService(session)
+                artifact_repo = SqlArtifactRepository(
+                    session, schema_registry, projection_sync
+                )
+                transcription_handler = TranscriptionTaskHandler(
+                    artifact_repository=artifact_repo,
+                    schema_registry=schema_registry,
+                )
+                return TranscriptionWorker(
+                    transcription_handler=transcription_handler,
+                    video_repository=video_repo,
+                    model_profile=self.profile_name,
+                )
+
+            return create_transcription_worker
+        elif self.config.task_type == TaskType.SCENE_DETECTION:
+            from ..domain.schema_registry import SchemaRegistry
+            from ..repositories.artifact_repository import SqlArtifactRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from ..services.projection_sync_service import ProjectionSyncService
+            from .scene_detection_service import SceneDetectionService
+
+            # Get settings from task_settings (use defaults if not specified)
+            threshold = self.task_settings.get("scene_detection_threshold", 0.4)
+            min_scene_len = self.task_settings.get("scene_detection_min_length", 0.6)
+
+            # Create scene detection worker with dependencies
+            def create_scene_detection_worker(session):
+                video_repo = SqlVideoRepository(session)
+                schema_registry = SchemaRegistry()
+                projection_sync = ProjectionSyncService(session)
+                artifact_repo = SqlArtifactRepository(
+                    session, schema_registry, projection_sync
+                )
+                scene_service = SceneDetectionService(
+                    threshold=threshold,
+                    min_scene_len=min_scene_len,
+                )
+                return SceneDetectionWorker(
+                    scene_service=scene_service,
+                    artifact_repository=artifact_repo,
+                    video_repository=video_repo,
+                    model_profile=self.profile_name,
+                )
+
+            return create_scene_detection_worker
         elif self.config.task_type == TaskType.OBJECT_DETECTION:
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
@@ -665,6 +812,8 @@ class WorkerPoolManager:
         """Create default worker pools with balanced configuration."""
         default_configs = [
             WorkerConfig(TaskType.HASH, 4, ResourceType.CPU, 1),
+            WorkerConfig(TaskType.TRANSCRIPTION, 2, ResourceType.CPU, 2),
+            WorkerConfig(TaskType.SCENE_DETECTION, 2, ResourceType.CPU, 3),
             WorkerConfig(TaskType.OBJECT_DETECTION, 2, ResourceType.GPU, 3),
             WorkerConfig(TaskType.FACE_DETECTION, 2, ResourceType.GPU, 3),
             WorkerConfig(TaskType.OCR, 2, ResourceType.GPU, 3),
