@@ -239,22 +239,22 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 12: Multi-Source Find Merging**
   - **Validates: Requirements 23.1, 23.3, 23.4, 23.5**
 
-- [ ] 16. API Endpoints
-- [ ] 16.1 Implement GET /v1/videos/{video_id}/jump endpoint
+- [x] 16. API Endpoints
+- [x] 16.1 Implement GET /v1/videos/{video_id}/jump endpoint
   - Support all artifact types via kind parameter
   - Support label, face_cluster_id, min_confidence filtering
   - Support selection and profile parameters
   - Return 404 when no match found
   - _Requirements: 8.1, 8.4, 8.5, 22.1_
 
-- [ ] 16.2 Implement GET /v1/videos/{video_id}/find endpoint
+- [x] 16.2 Implement GET /v1/videos/{video_id}/find endpoint
   - Support query parameter
   - Support direction (next/prev)
   - Support source (transcript, ocr, all)
   - Return matches with snippets
   - _Requirements: 9.1, 9.4, 9.5, 23.4_
 
-- [ ] 16.3 Implement GET /v1/videos/{video_id}/artifacts endpoint
+- [x] 16.3 Implement GET /v1/videos/{video_id}/artifacts endpoint
   - Support type filtering
   - Support time range filtering (from_ms, to_ms)
   - Support selection and profile parameters

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.logger import logger as fastapi_logger
 
+from src.api.artifact_controller import router as artifact_router
 from src.api.path_controller_full import router as path_router
 from src.api.task_routes import router as task_router
 from src.api.video_controller import router as video_router
@@ -167,6 +168,8 @@ def create_app(config_path: str | None = None) -> FastAPI:
     # Include routers
     fastapi_logger.info("Including video router...")
     app.include_router(video_router, prefix="/v1")
+    fastapi_logger.info("Including artifact router...")
+    app.include_router(artifact_router, prefix="/v1")
     fastapi_logger.info("Including path router...")
     app.include_router(path_router, prefix="/v1")
     fastapi_logger.info("Including task router...")
