@@ -207,11 +207,11 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - **Property 6: Artifact Type Storage Consistency (partial)**
   - **Validates: Requirements 17.2**
 
-- [ ] 13. Checkpoint - All Artifact Types Migrated
+- [x] 13. Checkpoint - All Artifact Types Migrated
 - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 14. Jump Navigation Service
-- [ ] 14.1 Implement JumpNavigationService
+- [x] 14. Jump Navigation Service
+- [x] 14.1 Implement JumpNavigationService
   - jump_next() method
   - jump_prev() method
   - _filter_artifacts() helper
