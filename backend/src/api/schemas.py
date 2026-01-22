@@ -3,6 +3,62 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class JumpToSchema(BaseModel):
+    """Schema for jump target timestamp."""
+
+    start_ms: int = Field(..., description="Start timestamp in milliseconds")
+    end_ms: int = Field(..., description="End timestamp in milliseconds")
+
+
+class JumpResponseSchema(BaseModel):
+    """Schema for jump navigation response."""
+
+    jump_to: JumpToSchema = Field(..., description="Target timestamp to jump to")
+    artifact_ids: list[str] = Field(..., description="List of artifact IDs at target")
+
+
+class FindMatchSchema(BaseModel):
+    """Schema for find match result."""
+
+    jump_to: JumpToSchema = Field(..., description="Target timestamp to jump to")
+    artifact_id: str = Field(..., description="Artifact ID containing the match")
+    snippet: str = Field(..., description="Highlighted text snippet")
+    source: str = Field(..., description="Source of match: transcript or ocr")
+
+
+class FindResponseSchema(BaseModel):
+    """Schema for find within video response."""
+
+    matches: list[FindMatchSchema] = Field(..., description="List of matches found")
+
+
+class ArtifactPayloadSchema(BaseModel):
+    """Schema for artifact payload (flexible dict)."""
+
+    class Config:
+        extra = "allow"
+
+
+class ArtifactResponseSchema(BaseModel):
+    """Schema for artifact response."""
+
+    artifact_id: str = Field(..., description="Unique artifact identifier")
+    asset_id: str = Field(..., description="Asset (video) ID")
+    artifact_type: str = Field(..., description="Type of artifact")
+    schema_version: int = Field(..., description="Schema version")
+    span_start_ms: int = Field(..., description="Start timestamp in milliseconds")
+    span_end_ms: int = Field(..., description="End timestamp in milliseconds")
+    payload: dict = Field(..., description="Artifact payload data")
+    producer: str = Field(..., description="Producer name")
+    producer_version: str = Field(..., description="Producer version")
+    model_profile: str = Field(..., description="Model profile")
+    run_id: str = Field(..., description="Run ID")
+    created_at: datetime = Field(..., description="Creation timestamp")
+
+    class Config:
+        from_attributes = True
+
+
 class VideoCreateSchema(BaseModel):
     """Schema for creating a new video."""
 
