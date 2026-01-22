@@ -267,12 +267,12 @@ This plan implements the artifact envelope architecture for Eioku's video proces
   - Test artifacts query endpoint
   - Test error cases (404, 400)
 
-- [ ] 17. Multi-Profile Support
-- [ ] 17.1 Update task handlers to include model_profile in artifact creation
+- [x] 17. Multi-Profile Support
+- [x] 17.1 Update task handlers to include model_profile in artifact creation
   - Pass model_profile from worker configuration
   - _Requirements: 11.1_
 
-- [ ] 17.2 Implement GET /v1/videos/{video_id}/profiles endpoint
+- [x] 17.2 Implement GET /v1/videos/{video_id}/profiles endpoint
   - List available profiles for asset and artifact_type
   - _Requirements: 11.5_
 

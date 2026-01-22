@@ -99,3 +99,21 @@ class VideoUpdateSchema(BaseModel):
     processed_at: datetime | None = Field(
         None, description="Processing completion time"
     )
+
+
+class ProfileInfoSchema(BaseModel):
+    """Schema for model profile information."""
+
+    profile: str = Field(..., description="Model profile name")
+    artifact_count: int = Field(
+        ..., description="Number of artifacts with this profile"
+    )
+    run_ids: list[str] = Field(..., description="List of run IDs for this profile")
+
+
+class ProfilesResponseSchema(BaseModel):
+    """Schema for profiles endpoint response."""
+
+    video_id: str = Field(..., description="Video ID")
+    artifact_type: str = Field(..., description="Artifact type")
+    profiles: list[ProfileInfoSchema] = Field(..., description="Available profiles")

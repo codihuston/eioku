@@ -114,10 +114,16 @@ class HashWorker(TaskWorker):
 class TranscriptionWorker(TaskWorker):
     """Worker for transcription tasks."""
 
-    def __init__(self, transcription_handler=None, video_repository=None):
+    def __init__(
+        self,
+        transcription_handler=None,
+        video_repository=None,
+        model_profile: str = "balanced",
+    ):
         super().__init__(TaskType.TRANSCRIPTION)
         self.transcription_handler = transcription_handler
         self.video_repository = video_repository
+        self.model_profile = model_profile
 
     def _do_work(self, task: Task) -> dict:
         """Perform transcription using Whisper."""
@@ -132,8 +138,10 @@ class TranscriptionWorker(TaskWorker):
         if not video:
             raise RuntimeError(f"Video not found: {task.video_id}")
 
-        # Process transcription
-        success = self.transcription_handler.process_transcription_task(task, video)
+        # Process transcription with model_profile
+        success = self.transcription_handler.process_transcription_task(
+            task, video, model_profile=self.model_profile
+        )
 
         if not success:
             raise RuntimeError("Transcription processing failed")
@@ -245,10 +253,12 @@ class ObjectDetectionWorker(TaskWorker):
         self,
         detection_handler: "ObjectDetectionTaskHandler",
         video_repository: "VideoRepository",
+        model_profile: str = "balanced",
     ):
         super().__init__(TaskType.OBJECT_DETECTION)
         self.detection_handler = detection_handler
         self.video_repository = video_repository
+        self.model_profile = model_profile
 
     def _do_work(self, task: Task) -> dict:
         """Perform object detection."""
@@ -257,8 +267,10 @@ class ObjectDetectionWorker(TaskWorker):
         if not video:
             raise ValueError(f"Video not found: {task.video_id}")
 
-        # Process object detection
-        success = self.detection_handler.process_object_detection_task(task, video)
+        # Process object detection with model_profile
+        success = self.detection_handler.process_object_detection_task(
+            task, video, model_profile=self.model_profile
+        )
 
         if not success:
             raise Exception("Object detection processing failed")
@@ -280,10 +292,12 @@ class WorkerPool:
         config: WorkerConfig,
         orchestrator: TaskOrchestrator,
         task_settings: dict | None = None,
+        profile_name: str = "balanced",
     ):
         self.config = config
         self.orchestrator = orchestrator
         self.task_settings = task_settings or {}
+        self.profile_name = profile_name  # Store profile name for model_profile
         self.is_running = False
         self.workers = []
         self.executor = None
@@ -485,6 +499,7 @@ class WorkerPool:
                 return TranscriptionWorker(
                     transcription_handler=transcription_handler,
                     video_repository=video_repo,
+                    model_profile=self.profile_name,
                 )
 
             return create_transcription_worker
@@ -536,6 +551,7 @@ class WorkerPool:
                 return ObjectDetectionWorker(
                     detection_handler=detection_handler,
                     video_repository=video_repo,
+                    model_profile=self.profile_name,
                 )
 
             return create_object_detection_worker
@@ -553,10 +569,14 @@ class WorkerPoolManager:
     """Manages multiple worker pools."""
 
     def __init__(
-        self, orchestrator: TaskOrchestrator, task_settings: dict | None = None
+        self,
+        orchestrator: TaskOrchestrator,
+        task_settings: dict | None = None,
+        profile_name: str = "balanced",
     ):
         self.orchestrator = orchestrator
         self.task_settings = task_settings or {}
+        self.profile_name = profile_name  # Store profile name for model_profile
         self.pools: dict[TaskType, WorkerPool] = {}
         self.is_running = False
 
@@ -565,7 +585,9 @@ class WorkerPoolManager:
         if config.task_type in self.pools:
             raise ValueError(f"Worker pool for {config.task_type.value} already exists")
 
-        pool = WorkerPool(config, self.orchestrator, self.task_settings)
+        pool = WorkerPool(
+            config, self.orchestrator, self.task_settings, self.profile_name
+        )
         self.pools[config.task_type] = pool
 
         # Start pool if manager is running

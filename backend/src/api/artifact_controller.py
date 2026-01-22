@@ -7,6 +7,8 @@ from ..api.schemas import (
     ArtifactResponseSchema,
     FindResponseSchema,
     JumpResponseSchema,
+    ProfileInfoSchema,
+    ProfilesResponseSchema,
 )
 from ..database.connection import get_db
 from ..domain.artifacts import SelectionPolicy
@@ -282,3 +284,50 @@ async def get_artifacts(
         )
 
     return response
+
+
+@router.get("/{video_id}/profiles", response_model=ProfilesResponseSchema)
+async def get_available_profiles(
+    video_id: str,
+    artifact_type: str = Query(..., description="Artifact type to query profiles for"),
+    artifact_repo: SqlArtifactRepository = Depends(get_artifact_repository),
+) -> ProfilesResponseSchema:
+    """
+    Get available model profiles for a video and artifact type.
+
+    Returns information about which model profiles have been run for this
+    video and artifact type, including artifact counts and run IDs.
+    """
+    # Query all artifacts for this video and type
+    artifacts = artifact_repo.get_by_asset(
+        asset_id=video_id,
+        artifact_type=artifact_type,
+    )
+
+    # Group by model_profile
+    profile_map: dict[str, dict] = {}
+    for artifact in artifacts:
+        profile = artifact.model_profile
+        if profile not in profile_map:
+            profile_map[profile] = {
+                "artifact_count": 0,
+                "run_ids": set(),
+            }
+        profile_map[profile]["artifact_count"] += 1
+        profile_map[profile]["run_ids"].add(artifact.run_id)
+
+    # Convert to response format
+    profiles = [
+        ProfileInfoSchema(
+            profile=profile,
+            artifact_count=data["artifact_count"],
+            run_ids=sorted(list(data["run_ids"])),
+        )
+        for profile, data in sorted(profile_map.items())
+    ]
+
+    return ProfilesResponseSchema(
+        video_id=video_id,
+        artifact_type=artifact_type,
+        profiles=profiles,
+    )

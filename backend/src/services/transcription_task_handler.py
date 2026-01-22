@@ -46,7 +46,11 @@ class TranscriptionTaskHandler:
         return hashlib.sha256(video_path.encode()).hexdigest()[:16]
 
     def process_transcription_task(
-        self, task: Task, video: Video, run_id: str | None = None
+        self,
+        task: Task,
+        video: Video,
+        run_id: str | None = None,
+        model_profile: str | None = None,
     ) -> bool:
         """Process a transcription task for a video.
 
@@ -54,6 +58,8 @@ class TranscriptionTaskHandler:
             task: The transcription task to process
             video: The video to transcribe
             run_id: Optional run ID for tracking (generated if not provided)
+            model_profile: Optional model profile (fast, balanced, high_quality).
+                          If not provided, determined from model name.
 
         Returns:
             True if successful, False otherwise
@@ -85,10 +91,11 @@ class TranscriptionTaskHandler:
             config_hash = self._compute_config_hash(config)
             input_hash = self._compute_input_hash(video.file_path)
 
-            # Determine model profile based on model name
-            model_profile = self._determine_model_profile(
-                self.whisper_service.model_name
-            )
+            # Determine model profile - use provided or infer from model name
+            if model_profile is None:
+                model_profile = self._determine_model_profile(
+                    self.whisper_service.model_name
+                )
 
             # Step 3: Save transcription segments as artifacts
             logger.info(

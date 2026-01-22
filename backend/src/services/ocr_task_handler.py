@@ -64,7 +64,11 @@ class OcrTaskHandler:
         return "fast" if gpu else "balanced"
 
     def process_ocr_task(
-        self, task: Task, video: Video, run_id: str | None = None
+        self,
+        task: Task,
+        video: Video,
+        run_id: str | None = None,
+        model_profile: str | None = None,
     ) -> bool:
         """Process an OCR text detection task for a video.
 
@@ -72,6 +76,8 @@ class OcrTaskHandler:
             task: The OCR task to process
             video: The video to analyze
             run_id: Optional run ID for tracking (generated if not provided)
+            model_profile: Optional model profile (fast, balanced, high_quality).
+                          If not provided, determined from GPU usage.
 
         Returns:
             True if successful, False otherwise
@@ -100,8 +106,9 @@ class OcrTaskHandler:
             config_hash = self._compute_config_hash(config)
             input_hash = self._compute_input_hash(video.file_path)
 
-            # Determine model profile based on GPU usage
-            model_profile = self._determine_model_profile(self.gpu)
+            # Determine model profile - use provided or infer from GPU usage
+            if model_profile is None:
+                model_profile = self._determine_model_profile(self.gpu)
 
             # Create one artifact per text detection
             saved_count = 0

@@ -405,3 +405,88 @@ def test_get_artifacts_empty_result(client, test_video):
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 0
+
+
+def test_get_profiles(client, artifact_repo, test_video):
+    """Test getting available profiles for a video and artifact type."""
+    # Create artifacts with different profiles
+    # Fast profile - 3 artifacts
+    for i in range(3):
+        artifact = create_transcript_artifact(
+            f"t_fast_{i}",
+            test_video.video_id,
+            i * 1000,
+            (i + 1) * 1000,
+            f"Fast segment {i}",
+        )
+        artifact.model_profile = "fast"
+        artifact.run_id = "run_fast"
+        artifact_repo.create(artifact)
+
+    # Balanced profile - 5 artifacts
+    for i in range(5):
+        artifact = create_transcript_artifact(
+            f"t_balanced_{i}",
+            test_video.video_id,
+            i * 1000,
+            (i + 1) * 1000,
+            f"Balanced segment {i}",
+        )
+        artifact.model_profile = "balanced"
+        artifact.run_id = "run_balanced"
+        artifact_repo.create(artifact)
+
+    # High quality profile - 2 artifacts
+    for i in range(2):
+        artifact = create_transcript_artifact(
+            f"t_hq_{i}",
+            test_video.video_id,
+            i * 1000,
+            (i + 1) * 1000,
+            f"HQ segment {i}",
+        )
+        artifact.model_profile = "high_quality"
+        artifact.run_id = "run_hq"
+        artifact_repo.create(artifact)
+
+    # Test the profiles endpoint
+    response = client.get(
+        f"/v1/videos/{test_video.video_id}/profiles",
+        params={"artifact_type": "transcript.segment"},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["video_id"] == test_video.video_id
+    assert data["artifact_type"] == "transcript.segment"
+    assert len(data["profiles"]) == 3
+
+    # Check profiles are sorted alphabetically
+    profiles = {p["profile"]: p for p in data["profiles"]}
+    assert "fast" in profiles
+    assert "balanced" in profiles
+    assert "high_quality" in profiles
+
+    # Check artifact counts
+    assert profiles["fast"]["artifact_count"] == 3
+    assert profiles["balanced"]["artifact_count"] == 5
+    assert profiles["high_quality"]["artifact_count"] == 2
+
+    # Check run IDs
+    assert profiles["fast"]["run_ids"] == ["run_fast"]
+    assert profiles["balanced"]["run_ids"] == ["run_balanced"]
+    assert profiles["high_quality"]["run_ids"] == ["run_hq"]
+
+
+def test_get_profiles_empty(client, test_video):
+    """Test getting profiles when no artifacts exist."""
+    response = client.get(
+        f"/v1/videos/{test_video.video_id}/profiles",
+        params={"artifact_type": "transcript.segment"},
+    )
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["video_id"] == test_video.video_id
+    assert data["artifact_type"] == "transcript.segment"
+    assert data["profiles"] == []
