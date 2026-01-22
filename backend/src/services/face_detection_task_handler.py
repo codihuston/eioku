@@ -83,14 +83,13 @@ class FaceDetectionTaskHandler:
                 logger.info(f"Generated run_id: {run_id}")
 
             # Detect faces in video using configured sample rate
-            # This returns the old Face domain models with aggregated detections
-            legacy_faces = self.detection_service.detect_faces_in_video(
+            # Returns frame-level detections
+            frame_results = self.detection_service.detect_faces_in_video(
                 video_path=video.file_path,
-                video_id=video.video_id,
                 sample_rate=self.sample_rate,
             )
 
-            logger.info(f"Detected {len(legacy_faces)} unique face clusters")
+            logger.info(f"Detected faces in {len(frame_results)} frames")
 
             # Compute provenance hashes
             config = {
@@ -104,16 +103,23 @@ class FaceDetectionTaskHandler:
             if model_profile is None:
                 model_profile = self._determine_model_profile(self.model_name)
 
-            # Convert legacy aggregated faces to individual artifact envelopes
             # Create one artifact per detection (frame-level granularity)
             saved_count = 0
-            for legacy_face in legacy_faces:
-                # Each legacy face has multiple bounding boxes (one per frame)
-                for bbox_data in legacy_face.bounding_boxes:
-                    frame_number = bbox_data["frame"]
-                    timestamp_sec = bbox_data["timestamp"]
-                    bbox_coords = bbox_data["bbox"]  # [x1, y1, x2, y2]
-                    confidence = bbox_data["confidence"]
+            cluster_counter = 0  # Simple cluster ID generation
+            
+            for frame_result in frame_results:
+                frame_number = frame_result["frame_number"]
+                timestamp_sec = frame_result["timestamp"]
+                detections = frame_result["detections"]
+
+                for detection in detections:
+                    bbox_coords = detection["bbox"]  # [x1, y1, x2, y2]
+                    confidence = detection["confidence"]
+                    
+                    # Generate a simple cluster ID for each detection
+                    # In a real implementation, this would use face embeddings
+                    cluster_id = f"face_{cluster_counter}"
+                    cluster_counter += 1
 
                     # Convert YOLO bbox format [x1, y1, x2, y2] to [x, y, width, height]
                     x1, y1, x2, y2 = bbox_coords
@@ -123,7 +129,7 @@ class FaceDetectionTaskHandler:
                     payload = FaceDetectionV1(
                         confidence=confidence,
                         bounding_box=bbox,
-                        cluster_id=legacy_face.person_id,
+                        cluster_id=cluster_id,
                         frame_number=frame_number,
                     )
 

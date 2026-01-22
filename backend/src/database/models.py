@@ -20,64 +20,7 @@ class Video(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
-class Transcription(Base):
-    __tablename__ = "transcriptions"
 
-    segment_id = Column(String, primary_key=True)
-    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
-    text = Column(Text, nullable=False)
-    start = Column(Float, nullable=False)  # Start time in seconds
-    end = Column(Float, nullable=False)  # End time in seconds
-    confidence = Column(Float)  # Transcription confidence score
-    speaker = Column(String)  # Speaker ID for multi-speaker audio
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class Scene(Base):
-    __tablename__ = "scenes"
-
-    scene_id = Column(String, primary_key=True)
-    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
-    scene = Column(Integer, nullable=False)  # Scene number/index
-    start = Column(Float, nullable=False)  # Start time in seconds
-    end = Column(Float, nullable=False)  # End time in seconds
-    thumbnail_path = Column(String)  # Path to scene thumbnail image
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class Object(Base):
-    __tablename__ = "objects"
-
-    object_id = Column(String, primary_key=True)
-    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
-    label = Column(String, nullable=False, index=True)  # Object class label
-    timestamps = Column(JSON, nullable=False)  # Timestamps where object appears
-    bounding_boxes = Column(JSON, nullable=False)  # Bounding box coordinates
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class Face(Base):
-    __tablename__ = "faces"
-
-    face_id = Column(String, primary_key=True)
-    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
-    person_id = Column(String)  # Person identifier for clustering
-    timestamps = Column(JSON, nullable=False)  # Timestamps where face appears
-    bounding_boxes = Column(JSON, nullable=False)  # Bounding box coordinates
-    confidence = Column(Float)  # Face detection confidence
-    created_at = Column(DateTime, server_default=func.now())
-
-
-class Topic(Base):
-    __tablename__ = "topics"
-
-    topic_id = Column(String, primary_key=True)
-    video_id = Column(String, ForeignKey("videos.video_id"), nullable=False, index=True)
-    label = Column(String, nullable=False, index=True)  # Topic label
-    keywords = Column(JSON, nullable=False)  # Related keywords
-    relevance_score = Column(Float, nullable=False)  # Topic relevance score
-    timestamps = Column(JSON, nullable=False)  # Timestamps where topic appears
-    created_at = Column(DateTime, server_default=func.now())
 
 
 class PathConfig(Base):
