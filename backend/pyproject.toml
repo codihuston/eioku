@@ -21,11 +21,12 @@ ultralytics = "^8.0.0"
 av = "^13.0.0"
 psycopg2-binary = "^2.9.9"
 easyocr = "^1.7.0"
+arq = "^0.26"
+httpx = "^0.25.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"
 pytest = "^7.4.3"
-httpx = "^0.25.2"
 
 [build-system]
 requires = ["poetry-core"]
