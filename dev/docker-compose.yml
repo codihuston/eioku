@@ -92,6 +92,7 @@ services:
       dockerfile: ../dev/Dockerfile.ml-service
     volumes:
       - ../ml-service:/app
+      - ../test-videos:/media:ro
       - ml_models:/models
     environment:
       - PYTHONPATH=/app
