@@ -107,14 +107,14 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 5. Implement health check endpoint
 
-- [ ] 5.1 Implement GET /health endpoint
+- [x] 5.1 Implement GET /health endpoint
   - Return model status (ready/failed) for each model
   - Return GPU availability and device info
   - Return memory usage (allocated, reserved, total)
   - Return degraded status if any model failed
   - _Requirements: 3.7, 17.8, 17.9, 17.10_
 
-- [ ]* 5.2 Write unit test for health endpoint
+- [x] 5.2 Write unit test for health endpoint
   - Test healthy response when all models ready
   - Test degraded response when model fails
   - Test GPU info is included
