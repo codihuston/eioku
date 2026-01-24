@@ -250,9 +250,8 @@ class TestProjectionSyncService:
         # Sync artifact
         self.service.sync_artifact(face_artifact)
 
-        # Verify SQL was executed
+        # Verify SQL was executed (commit happens in batch_create, not here)
         assert self.mock_session.execute.called
-        assert self.mock_session.commit.called
 
         # Verify the SQL contains the expected data
         call_args = self.mock_session.execute.call_args
@@ -263,3 +262,81 @@ class TestProjectionSyncService:
         assert params["confidence"] == 0.95
         assert params["start_ms"] == 2000
         assert params["end_ms"] == 2001
+
+    def test_sync_ocr_text_artifact_postgresql(self):
+        """Test syncing ocr.text artifact to PostgreSQL FTS."""
+        # Create OCR text artifact
+        ocr_artifact = ArtifactEnvelope(
+            artifact_id="ocr_123",
+            asset_id="video_123",
+            artifact_type="ocr.text",
+            schema_version=1,
+            span_start_ms=3000,
+            span_end_ms=3001,
+            payload_json=(
+                '{"text": "Welcome to the presentation", "confidence": 0.94, '
+                '"bounding_box": [{"x": 100.0, "y": 50.0}, {"x": 400.0, "y": 50.0}, '
+                '{"x": 400.0, "y": 100.0}, {"x": 100.0, "y": 100.0}], '
+                '"language": "en", "frame_number": 90}'
+            ),
+            producer="easyocr",
+            producer_version="easyocr_en",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_123",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock PostgreSQL dialect
+        self.mock_bind.dialect.name = "postgresql"
+
+        # Sync artifact
+        self.service.sync_artifact(ocr_artifact)
+
+        # Verify SQL was executed (commit happens in batch_create, not here)
+        assert self.mock_session.execute.called
+
+        # Verify the SQL contains the expected data
+        call_args = self.mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["artifact_id"] == "ocr_123"
+        assert params["asset_id"] == "video_123"
+        assert params["start_ms"] == 3000
+        assert params["end_ms"] == 3001
+        assert params["text"] == "Welcome to the presentation"
+
+    def test_sync_ocr_text_artifact_sqlite(self):
+        """Test syncing ocr.text artifact to SQLite FTS5."""
+        # Create OCR text artifact
+        ocr_artifact = ArtifactEnvelope(
+            artifact_id="ocr_456",
+            asset_id="video_123",
+            artifact_type="ocr.text",
+            schema_version=1,
+            span_start_ms=4000,
+            span_end_ms=4001,
+            payload_json=(
+                '{"text": "Chapter 1", "confidence": 0.89, '
+                '"bounding_box": [{"x": 50.0, "y": 25.0}, {"x": 200.0, "y": 25.0}, '
+                '{"x": 200.0, "y": 75.0}, {"x": 50.0, "y": 75.0}], '
+                '"language": "en", "frame_number": 120}'
+            ),
+            producer="easyocr",
+            producer_version="easyocr_en",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_123",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock SQLite dialect
+        self.mock_bind.dialect.name = "sqlite"
+
+        # Sync artifact
+        self.service.sync_artifact(ocr_artifact)
+
+        # Verify SQL was executed twice (metadata + FTS5)
+        # Commit happens in batch_create, not here
+        assert self.mock_session.execute.call_count == 2

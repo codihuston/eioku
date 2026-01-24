@@ -525,8 +525,11 @@ class WorkerPool:
                                 f"failed: {result['error']}"
                             )
 
-                    except Exception as e:
-                        error_msg = f"Worker execution failed: {str(e)}"
+                    except TimeoutError:
+                        error_msg = (
+                            f"Task timeout after {self.task_timeout} seconds "
+                            f"({self.task_timeout / 60:.1f} minutes)"
+                        )
                         # Rollback session before updating task
                         try:
                             session.rollback()
