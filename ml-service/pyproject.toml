@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "eioku-ml-service"
+version = "0.1.0"
+description = "Eioku ML Service - Stateless ML inference endpoints"
+authors = ["Eioku Team <team@eioku.com>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+pydantic = "^2.0"
+torch = "^2.0"
+torchvision = "^0.15"
+ultralytics = "^8.0.0"
+faster-whisper = "^1.2.1"
+easyocr = "^1.7.0"
+opencv-python = "^4.8.0"
+numpy = "^1.24"
+pillow = "^10.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.1.6"
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+httpx = "^0.25.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP"]
+ignore = []

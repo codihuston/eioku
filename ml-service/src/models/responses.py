@@ -1,0 +1,152 @@
+"""Response models for ML Service inference endpoints."""
+
+from pydantic import BaseModel, Field
+
+
+class BoundingBox(BaseModel):
+    """Bounding box coordinates."""
+
+    x: float = Field(..., description="X coordinate")
+    y: float = Field(..., description="Y coordinate")
+    width: float = Field(..., description="Width")
+    height: float = Field(..., description="Height")
+
+
+class Detection(BaseModel):
+    """Detection result with bounding box."""
+
+    frame_index: int = Field(..., description="Frame index")
+    timestamp_ms: int = Field(..., description="Timestamp in milliseconds")
+    label: str = Field(..., description="Detection label")
+    confidence: float = Field(..., ge=0, le=1, description="Confidence score")
+    bbox: BoundingBox = Field(..., description="Bounding box")
+
+
+class FaceDetection(Detection):
+    """Face detection result with cluster ID."""
+
+    cluster_id: str | None = Field(default=None, description="Face cluster ID")
+
+
+class Segment(BaseModel):
+    """Transcription segment."""
+
+    start_ms: int = Field(..., description="Start time in milliseconds")
+    end_ms: int = Field(..., description="End time in milliseconds")
+    text: str = Field(..., description="Segment text")
+    confidence: float = Field(..., ge=0, le=1, description="Confidence score")
+    words: list[dict] | None = Field(default=None, description="Word-level details")
+
+
+class OCRDetection(BaseModel):
+    """OCR detection result."""
+
+    frame_index: int = Field(..., description="Frame index")
+    timestamp_ms: int = Field(..., description="Timestamp in milliseconds")
+    text: str = Field(..., description="Detected text")
+    confidence: float = Field(..., ge=0, le=1, description="Confidence score")
+    polygon: list[dict] = Field(..., description="Text polygon coordinates")
+
+
+class PlacePrediction(BaseModel):
+    """Place classification prediction."""
+
+    label: str = Field(..., description="Place label")
+    confidence: float = Field(..., ge=0, le=1, description="Confidence score")
+
+
+class PlaceClassification(BaseModel):
+    """Place classification result."""
+
+    frame_index: int = Field(..., description="Frame index")
+    timestamp_ms: int = Field(..., description="Timestamp in milliseconds")
+    predictions: list[PlacePrediction] = Field(..., description="Top predictions")
+
+
+class Scene(BaseModel):
+    """Scene detection result."""
+
+    scene_index: int = Field(..., description="Scene index")
+    start_ms: int = Field(..., description="Start time in milliseconds")
+    end_ms: int = Field(..., description="End time in milliseconds")
+
+
+class ObjectDetectionResponse(BaseModel):
+    """Response model for object detection."""
+
+    run_id: str = Field(..., description="Unique run ID")
+    config_hash: str = Field(..., description="Configuration hash")
+    input_hash: str = Field(..., description="Input hash")
+    model_profile: str = Field(..., description="Model profile used")
+    producer: str = Field(..., description="Producer name")
+    producer_version: str = Field(..., description="Producer version")
+    detections: list[Detection] = Field(..., description="List of detections")
+
+
+class FaceDetectionResponse(BaseModel):
+    """Response model for face detection."""
+
+    run_id: str = Field(..., description="Unique run ID")
+    config_hash: str = Field(..., description="Configuration hash")
+    input_hash: str = Field(..., description="Input hash")
+    producer: str = Field(default="yolo", description="Producer name")
+    producer_version: str = Field(default="8.0.0", description="Producer version")
+    detections: list[FaceDetection] = Field(..., description="List of detections")
+
+
+class TranscriptionResponse(BaseModel):
+    """Response model for transcription."""
+
+    run_id: str = Field(..., description="Unique run ID")
+    config_hash: str = Field(..., description="Configuration hash")
+    input_hash: str = Field(..., description="Input hash")
+    language: str = Field(..., description="Detected language")
+    producer: str = Field(default="whisper", description="Producer name")
+    producer_version: str = Field(default="3.0", description="Producer version")
+    segments: list[Segment] = Field(..., description="List of segments")
+
+
+class OCRResponse(BaseModel):
+    """Response model for OCR."""
+
+    run_id: str = Field(..., description="Unique run ID")
+    config_hash: str = Field(..., description="Configuration hash")
+    input_hash: str = Field(..., description="Input hash")
+    producer: str = Field(default="easyocr", description="Producer name")
+    producer_version: str = Field(default="1.7.0", description="Producer version")
+    detections: list[OCRDetection] = Field(..., description="List of detections")
+
+
+class PlaceDetectionResponse(BaseModel):
+    """Response model for place detection."""
+
+    run_id: str = Field(..., description="Unique run ID")
+    config_hash: str = Field(..., description="Configuration hash")
+    input_hash: str = Field(..., description="Input hash")
+    producer: str = Field(default="places365", description="Producer name")
+    producer_version: str = Field(default="1.0.0", description="Producer version")
+    classifications: list[PlaceClassification] = Field(
+        ..., description="List of classifications"
+    )
+
+
+class SceneDetectionResponse(BaseModel):
+    """Response model for scene detection."""
+
+    run_id: str = Field(..., description="Unique run ID")
+    config_hash: str = Field(..., description="Configuration hash")
+    input_hash: str = Field(..., description="Input hash")
+    producer: str = Field(default="scenedetect", description="Producer name")
+    producer_version: str = Field(default="0.6.0", description="Producer version")
+    scenes: list[Scene] = Field(..., description="List of scenes")
+
+
+class HealthResponse(BaseModel):
+    """Response model for health check."""
+
+    status: str = Field(..., description="Service status (healthy, degraded, unhealthy)")
+    models_loaded: list[str] = Field(..., description="List of loaded models")
+    gpu_available: bool = Field(..., description="GPU availability")
+    gpu_device_name: str | None = Field(default=None, description="GPU device name")
+    gpu_memory_total_mb: int | None = Field(default=None, description="Total GPU memory")
+    gpu_memory_used_mb: int | None = Field(default=None, description="Used GPU memory")
