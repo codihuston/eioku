@@ -125,12 +125,14 @@ class TestPlaceDetectionTaskHandler:
         result = handler.process_place_detection_task(test_task, test_video)
 
         assert result is True
-        # Should create 2 artifacts (one per frame result)
-        assert mock_artifact_repository.create.call_count == 2
+        # Should call batch_create once with 2 artifacts (one per frame result)
+        mock_artifact_repository.batch_create.assert_called_once()
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        assert len(artifacts) == 2
 
         # Verify first artifact
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        artifact = artifacts[0]
         assert isinstance(artifact, ArtifactEnvelope)
         assert artifact.asset_id == test_video.video_id
         assert artifact.artifact_type == "place.classification"
@@ -158,8 +160,9 @@ class TestPlaceDetectionTaskHandler:
         assert result is True
 
         # Verify run_id is used
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        artifact = artifacts[0]
         assert artifact.run_id == run_id
 
     def test_process_place_detection_task_creates_valid_payloads(
@@ -179,8 +182,9 @@ class TestPlaceDetectionTaskHandler:
         handler.process_place_detection_task(test_task, test_video)
 
         # Verify first artifact payload
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        artifact = artifacts[0]
 
         # Parse and validate payload
         payload = PlaceClassificationV1.model_validate_json(artifact.payload_json)

@@ -135,7 +135,9 @@ class TestPerformance:
         assert len(artifacts) == num_artifacts
 
         # Performance assertion: should create 1000 artifacts in under 10 seconds
-        assert creation_time < 10.0, f"Creation took {creation_time:.2f}s (expected < 10s)"
+        assert (
+            creation_time < 10.0
+        ), f"Creation took {creation_time:.2f}s (expected < 10s)"
 
         print(f"\n✓ Created {num_artifacts} artifacts in {creation_time:.2f}s")
         print(f"  Average: {(creation_time / num_artifacts) * 1000:.2f}ms per artifact")
@@ -183,7 +185,9 @@ class TestPerformance:
         assert len(artifacts) == num_artifacts
 
         # Performance assertion: should query 500 artifacts in under 100ms
-        assert query_time < 0.1, f"Query took {query_time * 1000:.2f}ms (expected < 100ms)"
+        assert (
+            query_time < 0.1
+        ), f"Query took {query_time * 1000:.2f}ms (expected < 100ms)"
 
         print(f"\n✓ Queried {num_artifacts} artifacts in {query_time * 1000:.2f}ms")
 
@@ -234,9 +238,14 @@ class TestPerformance:
         assert 150 < len(artifacts) < 200
 
         # Performance assertion: should query in under 50ms
-        assert query_time < 0.05, f"Query took {query_time * 1000:.2f}ms (expected < 50ms)"
+        assert (
+            query_time < 0.05
+        ), f"Query took {query_time * 1000:.2f}ms (expected < 50ms)"
 
-        print(f"\n✓ Time range query returned {len(artifacts)} artifacts in {query_time * 1000:.2f}ms")
+        print(
+            f"\n✓ Time range query returned {len(artifacts)} artifacts "
+            f"in {query_time * 1000:.2f}ms"
+        )
 
     def test_index_usage_verification(self, session, test_video):
         """Verify that database indexes are being used for queries."""
@@ -316,14 +325,15 @@ class TestPerformance:
         # Should return all artifacts from all profiles
         assert len(artifacts) == artifacts_per_profile * len(profiles)
 
-        print(f"\n✓ Multi-profile query returned {len(artifacts)} artifacts in {query_time * 1000:.2f}ms")
+        print(
+            f"\n✓ Multi-profile query returned {len(artifacts)} artifacts "
+            f"in {query_time * 1000:.2f}ms"
+        )
 
     def test_database_size_monitoring(self, session):
         """Monitor database size growth with artifacts."""
         # Get initial database stats
-        result = session.execute(
-            sql_text("SELECT COUNT(*) FROM artifacts")
-        ).fetchone()
+        result = session.execute(sql_text("SELECT COUNT(*) FROM artifacts")).fetchone()
         initial_count = result[0]
 
         # Get page count (SQLite-specific)
@@ -335,7 +345,7 @@ class TestPerformance:
 
         initial_size_kb = (initial_pages * page_size) / 1024
 
-        print(f"\n✓ Database stats:")
+        print("\n✓ Database stats:")
         print(f"  Artifacts: {initial_count}")
         print(f"  Size: {initial_size_kb:.2f} KB")
         print(f"  Pages: {initial_pages}")

@@ -120,7 +120,7 @@ class PlaceDetectionTaskHandler:
                 model_profile = self._determine_model_profile(self.model_name)
 
             # Create one artifact per frame classification
-            saved_count = 0
+            artifacts = []
             for frame_result in frame_results:
                 frame_number = frame_result["frame_number"]
                 timestamp_sec = frame_result["timestamp"]
@@ -169,9 +169,11 @@ class PlaceDetectionTaskHandler:
                     created_at=datetime.utcnow(),
                 )
 
-                # Save to artifact repository
-                self.artifact_repository.create(artifact)
-                saved_count += 1
+                artifacts.append(artifact)
+
+            # Batch insert all artifacts
+            self.artifact_repository.batch_create(artifacts)
+            saved_count = len(artifacts)
 
             logger.info(
                 f"Place detection complete for video {video.video_id}. "

@@ -68,6 +68,71 @@ class SqlArtifactRepository(ArtifactRepository):
 
         return self._to_domain(entity)
 
+    def batch_create(self, artifacts: list[ArtifactEnvelope]) -> list[ArtifactEnvelope]:
+        """Create multiple artifacts in a single transaction.
+
+        This is more efficient than calling create() multiple times as it:
+        1. Validates all artifacts first
+        2. Inserts all in one database round-trip
+        3. Syncs all projections together
+
+        Args:
+            artifacts: List of artifacts to create
+
+        Returns:
+            List of created artifacts
+
+        Raises:
+            ValidationError: If any artifact fails schema validation
+            DatabaseError: If database operation fails
+        """
+        if not artifacts:
+            return []
+
+        logger.debug(
+            f"ArtifactRepository.batch_create() called for {len(artifacts)} artifacts"
+        )
+
+        try:
+            # Step 1: Validate all payloads first (fail fast)
+            for artifact in artifacts:
+                payload_dict = json.loads(artifact.payload_json)
+                self.schema_registry.validate(
+                    artifact.artifact_type, artifact.schema_version, payload_dict
+                )
+            logger.debug(f"All {len(artifacts)} payloads validated")
+
+            # Step 2: Convert all to entities
+            entities = [self._to_entity(artifact) for artifact in artifacts]
+
+            # Step 3: Bulk insert in a single transaction
+            self.session.bulk_save_objects(entities)
+            self.session.commit()
+
+            logger.info(
+                f"Created {len(artifacts)} artifacts in batch, "
+                f"types: {set(a.artifact_type for a in artifacts)}"
+            )
+
+            # Step 4: Synchronize to projection tables
+            for artifact in artifacts:
+                try:
+                    self.projection_sync_service.sync_artifact(artifact)
+                except Exception as e:
+                    # Log error but don't fail the batch
+                    artifact_id = artifact.artifact_id
+                    logger.error(
+                        f"Failed to sync projection for artifact {artifact_id}: {e}"
+                    )
+
+            return artifacts
+
+        except Exception as e:
+            # Rollback entire batch on any error
+            logger.error(f"Batch create failed, rolling back: {e}")
+            self.session.rollback()
+            raise
+
     def get_by_id(self, artifact_id: str) -> ArtifactEnvelope | None:
         """Get artifact by ID."""
         entity = (

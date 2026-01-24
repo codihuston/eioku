@@ -10,8 +10,6 @@ This test suite verifies the complete end-to-end flow:
 import json
 import uuid
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 from sqlalchemy import create_engine
@@ -25,10 +23,14 @@ from src.domain.schema_initialization import register_all_schemas
 from src.domain.schema_registry import SchemaRegistry
 from src.domain.schemas.face_detection_v1 import (
     BoundingBox as FaceBoundingBox,
+)
+from src.domain.schemas.face_detection_v1 import (
     FaceDetectionV1,
 )
 from src.domain.schemas.object_detection_v1 import (
     BoundingBox as ObjectBoundingBox,
+)
+from src.domain.schemas.object_detection_v1 import (
     ObjectDetectionV1,
 )
 from src.domain.schemas.ocr_text_v1 import OcrTextV1, PolygonPoint
@@ -552,7 +554,10 @@ class TestFullPipelineIntegration:
         # Create one artifact of each type
         artifact_types = [
             ("transcript.segment", TranscriptSegmentV1(text="test", confidence=0.9)),
-            ("scene", SceneV1(scene_index=0, method="content", score=0.8, frame_number=0)),
+            (
+                "scene",
+                SceneV1(scene_index=0, method="content", score=0.8, frame_number=0),
+            ),
             (
                 "object.detection",
                 ObjectDetectionV1(

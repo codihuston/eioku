@@ -111,7 +111,7 @@ class OcrTaskHandler:
                 model_profile = self._determine_model_profile(self.gpu)
 
             # Create one artifact per text detection
-            saved_count = 0
+            artifacts = []
             for frame_result in frame_results:
                 frame_number = frame_result["frame_number"]
                 timestamp_sec = frame_result["timestamp"]
@@ -156,9 +156,11 @@ class OcrTaskHandler:
                         created_at=datetime.utcnow(),
                     )
 
-                    # Save to artifact repository
-                    self.artifact_repository.create(artifact)
-                    saved_count += 1
+                    artifacts.append(artifact)
+
+            # Batch insert all artifacts
+            self.artifact_repository.batch_create(artifacts)
+            saved_count = len(artifacts)
 
             logger.info(
                 f"OCR text detection complete for video {video.video_id}. "

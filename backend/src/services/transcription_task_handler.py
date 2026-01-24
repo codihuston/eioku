@@ -101,8 +101,9 @@ class TranscriptionTaskHandler:
             logger.info(
                 f"Saving {len(transcription_result.segments)} segments as artifacts"
             )
-            saved_count = 0
 
+            # Collect all artifacts before batch insert
+            artifacts = []
             for segment in transcription_result.segments:
                 # Create payload using Pydantic schema
                 payload = TranscriptSegmentV1(
@@ -130,9 +131,11 @@ class TranscriptionTaskHandler:
                     created_at=datetime.utcnow(),
                 )
 
-                # Save to artifact repository
-                self.artifact_repository.create(artifact)
-                saved_count += 1
+                artifacts.append(artifact)
+
+            # Batch insert all artifacts
+            self.artifact_repository.batch_create(artifacts)
+            saved_count = len(artifacts)
 
             # Step 4: Clean up temporary audio file
             try:

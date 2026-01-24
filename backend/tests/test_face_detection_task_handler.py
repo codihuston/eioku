@@ -28,30 +28,32 @@ class TestFaceDetectionTaskHandler:
     def mock_detection_service(self):
         """Create mock face detection service."""
         service = Mock()
-        
+
         # Mock service returns frame-level detections
-        service.detect_faces_in_video = Mock(return_value=[
-            {
-                "frame_number": 30,
-                "timestamp": 1.0,
-                "detections": [
-                    {
-                        "bbox": [100.0, 150.0, 200.0, 250.0],
-                        "confidence": 0.95,
-                    }
-                ]
-            },
-            {
-                "frame_number": 60,
-                "timestamp": 2.0,
-                "detections": [
-                    {
-                        "bbox": [110.0, 160.0, 210.0, 260.0],
-                        "confidence": 0.92,
-                    }
-                ]
-            },
-        ])
+        service.detect_faces_in_video = Mock(
+            return_value=[
+                {
+                    "frame_number": 30,
+                    "timestamp": 1.0,
+                    "detections": [
+                        {
+                            "bbox": [100.0, 150.0, 200.0, 250.0],
+                            "confidence": 0.95,
+                        }
+                    ],
+                },
+                {
+                    "frame_number": 60,
+                    "timestamp": 2.0,
+                    "detections": [
+                        {
+                            "bbox": [110.0, 160.0, 210.0, 260.0],
+                            "confidence": 0.92,
+                        }
+                    ],
+                },
+            ]
+        )
         return service
 
     @pytest.fixture
@@ -93,12 +95,14 @@ class TestFaceDetectionTaskHandler:
             video_path="/path/to/video.mp4",
             sample_rate=30,
         )
-        # Should create 2 artifacts (one per detection)
-        assert mock_artifact_repository.create.call_count == 2
+        # Should call batch_create once with 2 artifacts
+        mock_artifact_repository.batch_create.assert_called_once()
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]  # First positional argument
+        assert len(artifacts) == 2
 
         # Verify first artifact
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        artifact = artifacts[0]
         assert artifact.artifact_type == "face.detection"
         assert artifact.asset_id == "video-123"
         assert artifact.schema_version == 1
@@ -138,10 +142,12 @@ class TestFaceDetectionTaskHandler:
 
         # Assert
         assert result is True
-        # Verify that artifacts were created with a run_id
-        assert mock_artifact_repository.create.call_count == 2
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        # Verify that batch_create was called with artifacts that have a run_id
+        mock_artifact_repository.batch_create.assert_called_once()
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        assert len(artifacts) == 2
+        artifact = artifacts[0]
         assert artifact.run_id is not None
         assert len(artifact.run_id) > 0
 

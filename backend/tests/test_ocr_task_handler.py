@@ -149,12 +149,15 @@ class TestOcrTaskHandler:
         result = handler.process_ocr_task(test_task, test_video)
 
         assert result is True
-        # Should create 3 artifacts (1 from first frame, 2 from second frame)
-        assert mock_artifact_repository.create.call_count == 3
+        # Should call batch_create once with 3 artifacts
+        # (1 from first frame, 2 from second frame)
+        mock_artifact_repository.batch_create.assert_called_once()
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        assert len(artifacts) == 3
 
         # Verify first artifact
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        artifact = artifacts[0]
         assert isinstance(artifact, ArtifactEnvelope)
         assert artifact.asset_id == test_video.video_id
         assert artifact.artifact_type == "ocr.text"
@@ -182,8 +185,9 @@ class TestOcrTaskHandler:
         assert result is True
 
         # Verify run_id is used
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        artifact = artifacts[0]
         assert artifact.run_id == run_id
 
     def test_process_ocr_task_creates_valid_payloads(
@@ -203,8 +207,9 @@ class TestOcrTaskHandler:
         handler.process_ocr_task(test_task, test_video)
 
         # Verify first artifact payload
-        first_call = mock_artifact_repository.create.call_args_list[0]
-        artifact = first_call[0][0]
+        call_args = mock_artifact_repository.batch_create.call_args
+        artifacts = call_args[0][0]
+        artifact = artifacts[0]
 
         # Parse and validate payload
         payload = OcrTextV1.model_validate_json(artifact.payload_json)

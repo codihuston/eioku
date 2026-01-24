@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from ..domain.artifacts import Run
 from ..domain.models import Task
 from ..utils.print_logger import get_logger
 from .task_orchestration import TaskType
@@ -140,12 +139,10 @@ class ObjectDetectionWorker(TaskWorker):
         if not success:
             raise Exception("Object detection processing failed")
 
-        # Get detected objects for response
-        objects = self.detection_handler.get_detected_objects(task.video_id)
-
+        # Return count from processed artifacts (avoid querying after batch_create)
         return {
-            "objects_detected": len(objects),
-            "unique_labels": len(set(obj.label for obj in objects)),
+            "objects_detected": "processed",
+            "message": "Object detection completed successfully",
         }
 
 
@@ -178,11 +175,9 @@ class FaceDetectionWorker(TaskWorker):
         if not success:
             raise Exception("Face detection processing failed")
 
-        # Get detected faces for response
-        faces = self.detection_handler.get_detected_faces(task.video_id)
-
+        # Return success message (avoid querying after batch_create)
         return {
-            "faces_detected": len(faces),
+            "message": "Face detection completed successfully",
         }
 
 
@@ -215,11 +210,9 @@ class OcrWorker(TaskWorker):
         if not success:
             raise Exception("OCR processing failed")
 
-        # Get detected text for response
-        text_artifacts = self.ocr_handler.get_detected_text(task.video_id)
-
+        # Return success message (avoid querying after batch_create)
         return {
-            "text_detections": len(text_artifacts),
+            "message": "OCR completed successfully",
         }
 
 
@@ -252,11 +245,9 @@ class PlaceDetectionWorker(TaskWorker):
         if not success:
             raise Exception("Place detection processing failed")
 
-        # Get detected places for response
-        places = self.detection_handler.get_detected_places(task.video_id)
-
+        # Return success message (avoid querying after batch_create)
         return {
-            "places_detected": len(places),
+            "message": "Place detection completed successfully",
         }
 
 
@@ -283,6 +274,7 @@ class TranscriptionWorker(TaskWorker):
 
         # Generate run_id for this transcription
         import uuid
+
         run_id = str(uuid.uuid4())
 
         # Process transcription with model_profile
@@ -293,11 +285,9 @@ class TranscriptionWorker(TaskWorker):
         if not success:
             raise Exception("Transcription processing failed")
 
-        # Get transcription segments for response
-        segments = self.transcription_handler.get_transcription_segments(task.video_id)
-
+        # Return success message (avoid querying after batch_create)
         return {
-            "segments_created": len(segments),
+            "message": "Transcription completed successfully",
             "run_id": run_id,
         }
 
@@ -327,6 +317,7 @@ class SceneDetectionWorker(TaskWorker):
 
         # Generate run_id for this scene detection
         import uuid
+
         run_id = str(uuid.uuid4())
 
         # Detect scenes and create artifacts
@@ -334,9 +325,8 @@ class SceneDetectionWorker(TaskWorker):
             video.file_path, video.video_id, run_id, model_profile=self.model_profile
         )
 
-        # Save artifacts to repository
-        for artifact in artifacts:
-            self.artifact_repository.create(artifact)
+        # Save artifacts to repository using batch create
+        self.artifact_repository.batch_create(artifacts)
 
         # Get scene info for response
         scene_info = self.scene_service.get_scene_info(artifacts)
@@ -436,20 +426,17 @@ class WorkerPool:
         else:
             logger.info(f"Worker loop started for {self.config.task_type.value}")
 
-        # Create session and repositories for this worker thread
-        # Single session is shared with the worker to reduce connection usage
-        session = next(get_db())
-        video_repo = SqlVideoRepository(session)
-        task_repo = SQLAlchemyTaskRepository(session)
-
-        # Pass session to worker factory so it reuses the same connection
-        worker = self.worker_factory(session)
-
         try:
             while self.is_running and not self._stop_event.is_set():
+                # Create a new session for each task to ensure isolation
+                session = None
                 try:
                     # Get next task from database atomically
                     logger.debug(f"Checking for {self.config.task_type.value} tasks...")
+
+                    # Create session for task dequeue
+                    session = next(get_db())
+                    task_repo = SQLAlchemyTaskRepository(session)
 
                     # Use atomic dequeue to prevent race conditions
                     task = task_repo.atomic_dequeue_pending_task(
@@ -457,13 +444,20 @@ class WorkerPool:
                     )
 
                     if task is None:
-                        # No tasks available, wait a bit
+                        # No tasks available, close session and wait
+                        session.close()
+                        session = None
                         time.sleep(30.0)
                         continue
 
                     logger.info(
                         f"Found task {task.task_id} for {self.config.task_type.value}"
                     )
+
+                    # Create worker WITHOUT session - it will create its own
+                    # Sessions cannot be shared across threads
+                    worker = self.worker_factory()
+
                     # Submit task to executor
                     future = self.executor.submit(worker.execute_task, task)
 
@@ -478,6 +472,7 @@ class WorkerPool:
 
                             # Update video status if this was a hash task
                             if self.config.task_type == TaskType.HASH:
+                                video_repo = SqlVideoRepository(session)
                                 video = video_repo.find_by_id(task.video_id)
                                 if video:
                                     video.status = "hashed"
@@ -511,27 +506,54 @@ class WorkerPool:
 
                     except Exception as e:
                         error_msg = f"Worker execution failed: {str(e)}"
+                        # Rollback session before updating task
+                        try:
+                            session.rollback()
+                        except Exception:
+                            pass
                         task.fail(error_msg)
                         task_repo.update(task)
                         logger.error(f"Task {task.task_id} failed: {error_msg}")
 
                 except Exception as e:
                     logger.error(f"Worker loop error: {e}")
+                    # Rollback the session to recover from transaction errors
+                    if session:
+                        try:
+                            session.rollback()
+                        except Exception as rollback_error:
+                            logger.error(
+                                f"Failed to rollback session: {rollback_error}"
+                            )
                     time.sleep(1.0)  # Prevent tight error loops
+                finally:
+                    # Always close session after each task
+                    if session:
+                        try:
+                            session.close()
+                        except Exception as close_error:
+                            logger.error(f"Failed to close session: {close_error}")
+                        session = None
+
+        except Exception as e:
+            logger.error(f"Fatal worker loop error: {e}")
         finally:
-            session.close()
+            logger.info(f"Worker loop exiting for {self.config.task_type.value}")
 
     def _get_worker_factory(self) -> Callable[..., TaskWorker]:
         """Get worker factory for task type.
 
-        All factories accept a session parameter to reuse the connection
-        from the worker loop, reducing database connection usage.
+        Workers create their own database sessions to ensure thread safety.
+        Sessions cannot be shared across threads.
         """
         if self.config.task_type == TaskType.HASH:
+            from ..database.connection import get_db
             from ..repositories.video_repository import SqlVideoRepository
             from .file_hash_service import FileHashService
 
-            def create_hash_worker(session):
+            def create_hash_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 hash_service = FileHashService()
                 return HashWorker(
@@ -540,6 +562,7 @@ class WorkerPool:
 
             return create_hash_worker
         elif self.config.task_type == TaskType.TRANSCRIPTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -550,7 +573,9 @@ class WorkerPool:
             model_name = self.task_settings.get("transcription_model", "base")
 
             # Create transcription worker with dependencies
-            def create_transcription_worker(session):
+            def create_transcription_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -569,6 +594,7 @@ class WorkerPool:
 
             return create_transcription_worker
         elif self.config.task_type == TaskType.SCENE_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -580,7 +606,9 @@ class WorkerPool:
             min_scene_len = self.task_settings.get("scene_detection_min_length", 0.6)
 
             # Create scene detection worker with dependencies
-            def create_scene_detection_worker(session):
+            def create_scene_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -600,6 +628,7 @@ class WorkerPool:
 
             return create_scene_detection_worker
         elif self.config.task_type == TaskType.OBJECT_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -611,7 +640,9 @@ class WorkerPool:
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
 
             # Create object detection worker with dependencies
-            def create_object_detection_worker(session):
+            def create_object_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -632,6 +663,7 @@ class WorkerPool:
 
             return create_object_detection_worker
         elif self.config.task_type == TaskType.FACE_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -639,11 +671,15 @@ class WorkerPool:
             from .face_detection_task_handler import FaceDetectionTaskHandler
 
             # Get settings from task_settings
-            model_name = self.task_settings.get("face_detection_model", "yolov8n-face.pt")
+            model_name = self.task_settings.get(
+                "face_detection_model", "yolov8n-face.pt"
+            )
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
 
             # Create face detection worker with dependencies
-            def create_face_detection_worker(session):
+            def create_face_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -664,6 +700,7 @@ class WorkerPool:
 
             return create_face_detection_worker
         elif self.config.task_type == TaskType.OCR:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -676,7 +713,9 @@ class WorkerPool:
             gpu = self.task_settings.get("ocr_gpu", False)
 
             # Create OCR worker with dependencies
-            def create_ocr_worker(session):
+            def create_ocr_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -698,6 +737,7 @@ class WorkerPool:
 
             return create_ocr_worker
         elif self.config.task_type == TaskType.PLACE_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -705,12 +745,16 @@ class WorkerPool:
             from .place_detection_task_handler import PlaceDetectionTaskHandler
 
             # Get settings from task_settings
-            model_name = self.task_settings.get("place_detection_model", "resnet18_places365")
+            model_name = self.task_settings.get(
+                "place_detection_model", "resnet18_places365"
+            )
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
             top_k = self.task_settings.get("place_detection_top_k", 5)
 
             # Create place detection worker with dependencies
-            def create_place_detection_worker(session):
+            def create_place_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -735,7 +779,7 @@ class WorkerPool:
             # Generic workers for other task types - need to pass task_type
             task_type = self.config.task_type
 
-            def create_generic_worker(session):
+            def create_generic_worker():
                 return TaskWorker(task_type)
 
             return create_generic_worker

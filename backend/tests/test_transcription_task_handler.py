@@ -70,8 +70,8 @@ class TestTranscriptionTaskHandler:
         self.mock_whisper_service.device = "cpu"
         self.mock_whisper_service.compute_type = "float32"
 
-        # Mock artifact repository create
-        self.mock_artifact_repo.create.return_value = Mock()
+        # Mock artifact repository batch_create
+        self.mock_artifact_repo.batch_create.return_value = []
 
         # Process task
         result = self.handler.process_transcription_task(self.task, self.video)
@@ -87,8 +87,11 @@ class TestTranscriptionTaskHandler:
             "/tmp/audio.wav", "test_video_123"
         )
 
-        # Verify artifacts created (2 segments)
-        assert self.mock_artifact_repo.create.call_count == 2
+        # Verify batch_create called once with 2 artifacts
+        self.mock_artifact_repo.batch_create.assert_called_once()
+        call_args = self.mock_artifact_repo.batch_create.call_args
+        artifacts = call_args[0][0]  # First positional argument
+        assert len(artifacts) == 2
 
         # Verify cleanup called
         self.mock_audio_service.cleanup_audio_file.assert_called_once_with(
@@ -223,7 +226,7 @@ class TestTranscriptionTaskHandler:
         self.mock_whisper_service.model_name = "base"
         self.mock_whisper_service.device = "cpu"
         self.mock_whisper_service.compute_type = "float32"
-        self.mock_artifact_repo.create.return_value = Mock()
+        self.mock_artifact_repo.batch_create.return_value = []
 
         # Mock cleanup failure
         self.mock_audio_service.cleanup_audio_file.side_effect = Exception(
@@ -235,7 +238,7 @@ class TestTranscriptionTaskHandler:
 
         # Should still succeed despite cleanup failure
         assert result is True
-        self.mock_artifact_repo.create.assert_called_once()
+        self.mock_artifact_repo.batch_create.assert_called_once()
 
     def test_determine_model_profile(self):
         """Test model profile determination."""

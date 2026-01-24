@@ -35,6 +35,7 @@ class ObjectDetectionTaskHandler:
         """Lazy load the YOLO model."""
         if self.model is None:
             from ultralytics import YOLO
+
             logger.info(f"Loading YOLO object detection model: {self.model_name}")
             self.model = YOLO(self.model_name)
 
@@ -90,25 +91,24 @@ class ObjectDetectionTaskHandler:
 
             # Detect objects in video using YOLO directly
             import cv2
-            
+
             cap = cv2.VideoCapture(video.file_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            
+
             # Group detections by label for aggregation
             detections_by_label = {}
-            
+
             frame_idx = 0
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
+
                 # Sample frames based on sample_rate
                 if frame_idx % self.sample_rate == 0:
                     # Run YOLO detection
                     results = self.model(frame, verbose=False)
-                    
+
                     # Process detections
                     for result in results:
                         boxes = result.boxes
@@ -118,23 +118,30 @@ class ObjectDetectionTaskHandler:
                             confidence = float(box.conf[0].cpu().numpy())
                             class_id = int(box.cls[0].cpu().numpy())
                             label = self.model.names[class_id]
-                            
+
                             # Store detection
                             if label not in detections_by_label:
                                 detections_by_label[label] = []
-                            
+
                             timestamp_sec = frame_idx / fps
-                            detections_by_label[label].append({
-                                "frame": frame_idx,
-                                "timestamp": timestamp_sec,
-                                "bbox": [float(x1), float(y1), float(x2), float(y2)],
-                                "confidence": confidence,
-                            })
-                
+                            detections_by_label[label].append(
+                                {
+                                    "frame": frame_idx,
+                                    "timestamp": timestamp_sec,
+                                    "bbox": [
+                                        float(x1),
+                                        float(y1),
+                                        float(x2),
+                                        float(y2),
+                                    ],
+                                    "confidence": confidence,
+                                }
+                            )
+
                 frame_idx += 1
-            
+
             cap.release()
-            
+
             logger.info(f"Detected {len(detections_by_label)} unique object types")
 
             # Compute provenance hashes
@@ -151,7 +158,7 @@ class ObjectDetectionTaskHandler:
 
             # Convert detections to individual artifact envelopes
             # Create one artifact per detection (frame-level granularity)
-            saved_count = 0
+            artifacts = []
             for label, bbox_list in detections_by_label.items():
                 # Each label has multiple bounding boxes (one per frame)
                 for bbox_data in bbox_list:
@@ -195,9 +202,11 @@ class ObjectDetectionTaskHandler:
                         created_at=datetime.utcnow(),
                     )
 
-                    # Save to artifact repository
-                    self.artifact_repository.create(artifact)
-                    saved_count += 1
+                    artifacts.append(artifact)
+
+            # Batch insert all artifacts
+            self.artifact_repository.batch_create(artifacts)
+            saved_count = len(artifacts)
 
             logger.info(
                 f"Object detection complete for video {video.video_id}. "

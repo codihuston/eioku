@@ -6,7 +6,8 @@ echo "🚀 Starting Eioku development environment..."
 cd "$(dirname "$0")"
 
 # Build and start services
-docker-compose up --build -d
+docker compose up -d
+# docker-compose up --build -d
 
 echo "✅ Development environment started!"
 echo ""

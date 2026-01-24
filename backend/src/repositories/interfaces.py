@@ -110,6 +110,26 @@ class ArtifactRepository(ABC):
         pass
 
     @abstractmethod
+    def batch_create(self, artifacts: list[ArtifactEnvelope]) -> list[ArtifactEnvelope]:
+        """Create multiple artifacts in a single transaction.
+
+        Validates all artifacts before inserting any.
+        Uses single transaction for all inserts.
+        Rolls back entire batch on any validation error.
+
+        Args:
+            artifacts: List of artifacts to create
+
+        Returns:
+            List of created artifacts
+
+        Raises:
+            ValidationError: If any artifact fails schema validation
+            DatabaseError: If database operation fails
+        """
+        pass
+
+    @abstractmethod
     def get_by_id(self, artifact_id: str) -> ArtifactEnvelope | None:
         """Get artifact by ID."""
         pass

@@ -14,7 +14,9 @@ class TranscriptSegmentV1(BaseModel):
     text: str = Field(..., description="Transcribed text content")
     speaker: str | None = Field(None, description="Speaker identifier or name")
     confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Transcription confidence score"
+        ...,
+        le=1.0,
+        description="Transcription confidence score (log probability, can be negative)",
     )
     language: str = Field(default="en", description="Language code (ISO 639-1)")
 
