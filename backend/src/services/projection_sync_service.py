@@ -126,8 +126,6 @@ class ProjectionSyncService:
             },
         )
 
-        self.session.commit()
-
         logger.debug(
             f"Synced transcript artifact {artifact.artifact_id} to FTS projection"
         )
@@ -182,8 +180,6 @@ class ProjectionSyncService:
             },
         )
 
-        self.session.commit()
-
         logger.debug(
             f"Synced scene artifact {artifact.artifact_id} to scene_ranges projection"
         )
@@ -210,7 +206,10 @@ class ProjectionSyncService:
                 """
                 INSERT INTO object_labels
                     (artifact_id, asset_id, label, confidence, start_ms, end_ms)
-                VALUES (:artifact_id, :asset_id, :label, :confidence, :start_ms, :end_ms)
+                VALUES (
+                    :artifact_id, :asset_id, :label, :confidence,
+                    :start_ms, :end_ms
+                )
                 ON CONFLICT (artifact_id) DO UPDATE
                 SET asset_id = EXCLUDED.asset_id,
                     label = EXCLUDED.label,
@@ -225,7 +224,10 @@ class ProjectionSyncService:
                 """
                 INSERT OR REPLACE INTO object_labels
                     (artifact_id, asset_id, label, confidence, start_ms, end_ms)
-                VALUES (:artifact_id, :asset_id, :label, :confidence, :start_ms, :end_ms)
+                VALUES (
+                    :artifact_id, :asset_id, :label, :confidence,
+                    :start_ms, :end_ms
+                )
                 """
             )
 
@@ -240,8 +242,6 @@ class ProjectionSyncService:
                 "end_ms": artifact.span_end_ms,
             },
         )
-
-        self.session.commit()
 
         logger.debug(
             f"Synced object.detection artifact {artifact.artifact_id} "
@@ -304,8 +304,6 @@ class ProjectionSyncService:
                 "end_ms": artifact.span_end_ms,
             },
         )
-
-        self.session.commit()
 
         logger.debug(
             f"Synced face.detection artifact {artifact.artifact_id} "
@@ -383,8 +381,6 @@ class ProjectionSyncService:
                 "text": ocr_text,
             },
         )
-
-        self.session.commit()
 
         logger.debug(
             f"Synced ocr.text artifact {artifact.artifact_id} to FTS projection"

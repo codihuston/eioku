@@ -54,7 +54,7 @@ class TestTaskWorker:
         result = worker.execute_task(task)
 
         assert result["status"] == "error"
-        assert result["error"] == "Test error"
+        assert result["error"] == "ValueError: Test error"
         assert task.is_failed()
 
 

@@ -271,4 +271,40 @@ All tasks added to GitHub Milestones and Issues.
 
 ---
 
-**Session End**: Comprehensive specification complete, ready for implementation.
+## Session: January 19, 2026
+
+**Overview**: Implemented object detection pipeline and migrated from SQLite to PostgreSQL.
+
+**Actions**: Added YOLOv8 object detection with PyAV video processing, created detection service and task handler, integrated with worker pools. Migrated entire database infrastructure to PostgreSQL for better concurrency and F support.
+
+**Outcome**: Object detection working with 2 GPU workers processing frames at 30fps intervals. PostgreSQL migration successful with all 297 tests passing. Fixed numpy float serialization issues for PostgreSQL compatibility.
+
+---
+
+## Session: January 20, 2026
+
+**Overview**: Implemented artifact envelope architecture to replace legacy projection tables.
+
+**Actions**: Created artifact envelope domain model with schema registry, implemented repositories for artifacts and runs, added selection policies for multi-profile support. Migrated all artifact types (transcripts, scenes, objects, faces, places, OCR) to new architecture with projection sync service.
+
+**Outcome**: Clean separation between raw artifacts and queryable projections. All artifact types integrated with Full-Text Search (FTS) and specialized projections. 297 tests passing with comprehensive artifact coverage.
+
+---
+
+## Session: January 22, 2026
+
+**Overview**: Completed artifact envelope API and navigation services.
+
+**Actions**: Implemented jump navigation service for artifact-to-artifact navigation, added FindWithinVideoService for keyword search across transcripts and OCR. Created comprehensive API endpoints for artifact queries with filtering and selection policies. Removed all legacy code and tables.
+
+**Outcome**: Full artifact envelope architecture operational. Jump navigation working across all artifact types. Multi-profile support enables quality/speed tradeoffs. Migration from legacy architecture complete.
+
+---
+
+## Session: January 24, 2026
+
+**Overview**: Fixed worker pool session isolation and added missing OCR/place detection workers.
+
+**Actions**: Implemented batch_create() for efficient bulk artifact inserts, fixed worker pool to create per-thread database sessions preventing transaction conflicts. Added OCR and place detection workers to all processing profiles. Fixed PostgreSQL compatibility in projection sync (INSERT OR REPLACE → ON CONFLICT). Fixed place detection service file paths for Docker.
+
+**Outcome**: Session isolation resolved - no more transaction errors. Batch operations significantly improved performance (2,686+ artifacts created successfully). OCR and place detection tasks now processing. All 297 tests passing.

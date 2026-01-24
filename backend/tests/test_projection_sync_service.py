@@ -49,9 +49,8 @@ class TestProjectionSyncService:
         # Sync artifact
         self.service.sync_artifact(self.transcript_artifact)
 
-        # Verify SQL was executed
+        # Verify SQL was executed (commit happens in batch_create, not here)
         assert self.mock_session.execute.called
-        assert self.mock_session.commit.called
 
         # Verify the SQL contains the expected data
         call_args = self.mock_session.execute.call_args
@@ -71,8 +70,8 @@ class TestProjectionSyncService:
         self.service.sync_artifact(self.transcript_artifact)
 
         # Verify SQL was executed twice (metadata + FTS5)
+        # Commit happens in batch_create, not here
         assert self.mock_session.execute.call_count == 2
-        assert self.mock_session.commit.called
 
     def test_sync_artifact_with_invalid_type(self):
         """Test syncing artifact with unsupported type (should not fail)."""
@@ -172,9 +171,8 @@ class TestProjectionSyncService:
         # Sync artifact
         self.service.sync_artifact(scene_artifact)
 
-        # Verify SQL was executed
+        # Verify SQL was executed (commit happens in batch_create, not here)
         assert self.mock_session.execute.called
-        assert self.mock_session.commit.called
 
         # Verify the SQL contains the expected data
         call_args = self.mock_session.execute.call_args
@@ -212,9 +210,8 @@ class TestProjectionSyncService:
         # Sync artifact
         self.service.sync_artifact(object_artifact)
 
-        # Verify SQL was executed
+        # Verify SQL was executed (commit happens in batch_create, not here)
         assert self.mock_session.execute.called
-        assert self.mock_session.commit.called
 
         # Verify the SQL contains the expected data
         call_args = self.mock_session.execute.call_args
@@ -253,9 +250,8 @@ class TestProjectionSyncService:
         # Sync artifact
         self.service.sync_artifact(face_artifact)
 
-        # Verify SQL was executed
+        # Verify SQL was executed (commit happens in batch_create, not here)
         assert self.mock_session.execute.called
-        assert self.mock_session.commit.called
 
         # Verify the SQL contains the expected data
         call_args = self.mock_session.execute.call_args
@@ -298,9 +294,8 @@ class TestProjectionSyncService:
         # Sync artifact
         self.service.sync_artifact(ocr_artifact)
 
-        # Verify SQL was executed
+        # Verify SQL was executed (commit happens in batch_create, not here)
         assert self.mock_session.execute.called
-        assert self.mock_session.commit.called
 
         # Verify the SQL contains the expected data
         call_args = self.mock_session.execute.call_args
@@ -343,5 +338,5 @@ class TestProjectionSyncService:
         self.service.sync_artifact(ocr_artifact)
 
         # Verify SQL was executed twice (metadata + FTS5)
+        # Commit happens in batch_create, not here
         assert self.mock_session.execute.call_count == 2
-        assert self.mock_session.commit.called
