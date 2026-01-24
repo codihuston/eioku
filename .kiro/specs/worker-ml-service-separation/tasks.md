@@ -10,12 +10,12 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 1. Add dependencies and create Redis service
 
-- [ ] 1.1 Add arq, httpx to backend/pyproject.toml
+- [x] 1.1 Add arq, httpx to backend/pyproject.toml
   - Add arq ^0.26 for job queue
   - Add httpx ^0.25 for async HTTP client
   - _Requirements: 4.1, 18.1_
 
-- [ ] 1.2 Update docker-compose.yml to add Valkey service
+- [x] 1.2 Update docker-compose.yml to add Valkey service
   - Add valkey service (port 6379)
   - Configure AOF persistence
   - Add eioku-network for service communication
@@ -28,7 +28,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 2. Create ML Service project structure
 
-- [ ] 2.1 Create ml-service directory with Python project layout
+- [x] 2.1 Create ml-service directory with Python project layout
   - Create ml-service/src/main.py (FastAPI app)
   - Create ml-service/src/api/ (endpoint routers)
   - Create ml-service/src/services/ (ML service implementations)
@@ -45,13 +45,13 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 3. Implement model initialization and GPU detection
 
-- [ ] 3.1 Create ModelManager for downloading and verifying models
+- [x] 3.1 Create ModelManager for downloading and verifying models
   - Implement download_model() for each model type (YOLO, Whisper, Places365, EasyOCR)
   - Implement verify_model() to test model loading
   - Implement GPU detection via torch.cuda.is_available()
   - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5, 17.6_
 
-- [ ] 3.2 Implement FastAPI lifespan with model initialization
+- [x] 3.2 Implement FastAPI lifespan with model initialization
   - Download all models on startup
   - Verify GPU availability and log device info
   - Handle graceful degradation (CPU fallback unless REQUIRE_GPU=true)

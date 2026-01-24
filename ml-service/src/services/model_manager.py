@@ -21,6 +21,15 @@ class ModelManager:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.models = {}
+        self.gpu_available = torch.cuda.is_available()
+
+    def _get_device(self) -> str:
+        """Get device string for model loading.
+
+        Returns:
+            "cuda" if GPU available, "cpu" otherwise
+        """
+        return "cuda" if self.gpu_available else "cpu"
 
     async def download_model(self, model_name: str, model_type: str) -> Path:
         """Download model from source and cache locally.
@@ -32,36 +41,47 @@ class ModelManager:
         Returns:
             Path to cached model
         """
-        cache_path = self.cache_dir / model_name
-
-        if cache_path.exists():
-            logger.info(f"Model {model_name} already cached at {cache_path}")
-            return cache_path
-
         logger.info(f"Downloading {model_type} model: {model_name}")
 
         try:
             if model_type == "yolo":
                 from ultralytics import YOLO
 
+                # YOLO will cache to ~/.yolov8 by default
                 model = YOLO(model_name)
-                model.save(str(cache_path))
+                logger.info(f"✓ YOLO model {model_name} downloaded")
+                return Path(model.model_name)
 
             elif model_type == "whisper":
-                # faster-whisper handles caching internally
+                # faster-whisper handles caching internally to ~/.cache/huggingface
                 from faster_whisper import WhisperModel
 
-                WhisperModel(model_name, device="auto", compute_type="auto")
-                logger.info(f"Whisper model {model_name} cached by faster-whisper")
+                model = WhisperModel(
+                    model_name, device=self._get_device(), compute_type="auto"
+                )
+                logger.info(f"✓ Whisper model {model_name} downloaded")
+                return Path(model_name)
 
             elif model_type == "easyocr":
                 import easyocr
 
-                easyocr.Reader(["en"], gpu=torch.cuda.is_available())
-                logger.info(f"EasyOCR model cached")
+                # EasyOCR caches to ~/.EasyOCR by default
+                reader = easyocr.Reader(
+                    ["en"], gpu=self.gpu_available, verbose=False
+                )
+                logger.info(f"✓ EasyOCR model downloaded")
+                return Path("easyocr")
 
-            logger.info(f"✓ Downloaded {model_name}")
-            return cache_path
+            elif model_type == "places365":
+                # Places365 model is loaded via torchvision
+                import torchvision.models as models
+
+                model = models.resnet18(pretrained=False)
+                logger.info(f"✓ Places365 model {model_name} downloaded")
+                return Path(model_name)
+
+            else:
+                raise ValueError(f"Unknown model type: {model_type}")
 
         except Exception as e:
             logger.error(f"Failed to download {model_name}: {e}")
@@ -84,23 +104,41 @@ class ModelManager:
                 from ultralytics import YOLO
 
                 model = YOLO(model_name)
+                # Test on dummy image
+                import numpy as np
+
+                dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
+                results = model(dummy_image, verbose=False)
                 logger.info(f"✓ YOLO model {model_name} verified")
 
             elif model_type == "whisper":
                 from faster_whisper import WhisperModel
 
-                WhisperModel(model_name, device="auto", compute_type="auto")
+                model = WhisperModel(
+                    model_name, device=self._get_device(), compute_type="auto"
+                )
                 logger.info(f"✓ Whisper model {model_name} verified")
 
             elif model_type == "easyocr":
                 import easyocr
 
-                easyocr.Reader(["en"], gpu=torch.cuda.is_available())
+                reader = easyocr.Reader(
+                    ["en"], gpu=self.gpu_available, verbose=False
+                )
                 logger.info(f"✓ EasyOCR model verified")
 
+            elif model_type == "places365":
+                import torchvision.models as models
+
+                model = models.resnet18(pretrained=False)
+                model.to(self._get_device())
+                model.eval()
+                logger.info(f"✓ Places365 model verified")
+
             # Log GPU detection result
-            if torch.cuda.is_available():
-                logger.info(f"  GPU detected: {torch.cuda.get_device_name(0)}")
+            if self.gpu_available:
+                device_name = torch.cuda.get_device_name(0)
+                logger.info(f"  GPU detected: {device_name}")
             else:
                 logger.info(f"  GPU not available, using CPU")
 
@@ -116,7 +154,7 @@ class ModelManager:
         Returns:
             Dictionary with GPU info
         """
-        if not torch.cuda.is_available():
+        if not self.gpu_available:
             return {
                 "gpu_available": False,
                 "gpu_device_name": None,
@@ -134,3 +172,21 @@ class ModelManager:
             "gpu_memory_total_mb": int(total_memory),
             "gpu_memory_used_mb": int(allocated_memory),
         }
+
+    def detect_gpu(self) -> bool:
+        """Detect GPU availability.
+
+        Returns:
+            True if GPU available, False otherwise
+        """
+        return self.gpu_available
+
+    def log_gpu_info(self):
+        """Log GPU information."""
+        if self.gpu_available:
+            device_name = torch.cuda.get_device_name(0)
+            total_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+            logger.info(f"GPU device: {device_name}")
+            logger.info(f"GPU memory: {total_memory:.2f} GB")
+        else:
+            logger.warning("GPU not available - will use CPU for inference (slower)")
