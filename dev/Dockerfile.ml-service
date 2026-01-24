@@ -6,15 +6,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
 RUN pip install poetry
 
-# Install dependencies from pyproject.toml (will be volume mounted)
-# We need to copy just the dependency files first for layer caching
-# But since they're volume mounted, we'll install from the mounted location
-RUN mkdir -p /app
+# Configure Poetry to not create virtualenv (use system Python)
+RUN poetry config virtualenvs.create false
 
 # Expose port
 EXPOSE 8001
@@ -22,6 +21,3 @@ EXPOSE 8001
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8001/health')" || exit 1
-
-# Run the application
-CMD ["sh", "-c", "poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi && uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload"]

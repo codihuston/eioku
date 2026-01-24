@@ -88,8 +88,8 @@ services:
 
   ml-service:
     build:
-      context: ../ml-service
-      dockerfile: ../dev/Dockerfile.ml-service
+      context: .
+      dockerfile: Dockerfile.ml-service
     volumes:
       - ../ml-service:/app
       - ../test-videos:/media:ro
@@ -101,7 +101,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     working_dir: /app
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
+    command: bash -c "poetry install --no-interaction --no-ansi && uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload"
     deploy:
       resources:
         reservations:
