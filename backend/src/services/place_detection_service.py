@@ -1,7 +1,6 @@
 """Place classification service using ResNet18 Places365 model."""
 
 import logging
-import os
 from pathlib import Path
 
 import cv2
@@ -28,12 +27,12 @@ class PlaceDetectionService:
         """
         # Use paths relative to the backend directory
         backend_dir = Path(__file__).parent.parent.parent
-        
+
         if model_path is None:
             model_path = str(backend_dir / "resnet18_places365.pth.tar")
         if labels_path is None:
             labels_path = str(backend_dir / "categories_places365.txt")
-            
+
         self.model_path = model_path
         self.labels_path = labels_path
         self.model = None

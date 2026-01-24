@@ -42,12 +42,21 @@ services:
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://eioku:eioku_dev@postgres:5432/eioku
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     working_dir: /app
     depends_on:
       postgres:
         condition: service_healthy
     # Just run the app - dependencies already installed in image
     command: poetry run gunicorn src.main:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --reload --log-level debug --access-logfile -
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     networks:
       - eioku-dev
 

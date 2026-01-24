@@ -2,8 +2,9 @@
 
 import threading
 import time
+import traceback
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -47,7 +48,10 @@ class TaskWorker:
 
     def execute_task(self, task: Task) -> dict:
         """Execute a task and return result."""
-        self.logger.info(f"Starting {self.task_type.value} task {task.task_id}")
+        self.logger.info(
+            f"Starting {self.task_type.value} task {task.task_id} "
+            f"for video {task.video_id}"
+        )
 
         try:
             # Task is already marked as running by atomic dequeue
@@ -58,14 +62,18 @@ class TaskWorker:
             # Mark task as completed
             task.complete()
 
-            self.logger.info(f"Completed {self.task_type.value} task {task.task_id}")
+            self.logger.info(
+                f"Completed {self.task_type.value} task {task.task_id} "
+                f"for video {task.video_id}"
+            )
             return {"status": "success", "result": result}
 
         except Exception as e:
-            error_msg = str(e)
+            error_msg = f"{type(e).__name__}: {str(e)}"
             task.fail(error_msg)
             self.logger.error(
-                f"Failed {self.task_type.value} task {task.task_id}: {error_msg}"
+                f"Failed {self.task_type.value} task {task.task_id} "
+                f"for video {task.video_id}: {error_msg}\n{traceback.format_exc()}"
             )
             return {"status": "error", "error": error_msg}
 
@@ -356,6 +364,14 @@ class WorkerPool:
         self.executor = None
         self._stop_event = threading.Event()
 
+        # Get task timeout from config (default to 30 minutes = 1800 seconds)
+        self.task_timeout = self.task_settings.get("task_timeout_seconds", 1800)
+        if "task_timeout_seconds" not in self.task_settings:
+            logger.info(
+                f"Task timeout not configured for {config.task_type.value}, "
+                f"using default: {self.task_timeout} seconds (30 minutes)"
+            )
+
         # Create worker instances
         self.worker_factory = self._get_worker_factory()
 
@@ -451,7 +467,8 @@ class WorkerPool:
                         continue
 
                     logger.info(
-                        f"Found task {task.task_id} for {self.config.task_type.value}"
+                        f"Found task {task.task_id} for {self.config.task_type.value} "
+                        f"(video: {task.video_id})"
                     )
 
                     # Create worker WITHOUT session - it will create its own
@@ -463,7 +480,7 @@ class WorkerPool:
 
                     # Wait for completion and handle result
                     try:
-                        result = future.result(timeout=300)  # 5 minute timeout
+                        result = future.result(timeout=self.task_timeout)
 
                         if result["status"] == "success":
                             # Update task status in database
@@ -495,17 +512,24 @@ class WorkerPool:
                                             )
 
                             task_type = self.config.task_type.value
-                            logger.info(f"Completed {task_type} task {task.task_id}")
+                            logger.info(
+                                f"Completed {task_type} task {task.task_id} "
+                                f"for video {task.video_id}"
+                            )
                         else:
                             # Update task as failed
                             task.fail(result["error"])
                             task_repo.update(task)
                             logger.error(
-                                f"Task {task.task_id} failed: {result['error']}"
+                                f"Task {task.task_id} for video {task.video_id} "
+                                f"failed: {result['error']}"
                             )
 
-                    except Exception as e:
-                        error_msg = f"Worker execution failed: {str(e)}"
+                    except TimeoutError:
+                        error_msg = (
+                            f"Task timeout after {self.task_timeout} seconds "
+                            f"({self.task_timeout / 60:.1f} minutes)"
+                        )
                         # Rollback session before updating task
                         try:
                             session.rollback()
@@ -513,7 +537,26 @@ class WorkerPool:
                             pass
                         task.fail(error_msg)
                         task_repo.update(task)
-                        logger.error(f"Task {task.task_id} failed: {error_msg}")
+                        logger.error(
+                            f"Task {task.task_id} for video {task.video_id} "
+                            f"timed out: {error_msg}"
+                        )
+                    except Exception as e:
+                        error_msg = (
+                            f"Worker execution failed: {type(e).__name__}: {str(e)}"
+                        )
+                        error_details = traceback.format_exc()
+                        # Rollback session before updating task
+                        try:
+                            session.rollback()
+                        except Exception:
+                            pass
+                        task.fail(error_msg)
+                        task_repo.update(task)
+                        logger.error(
+                            f"Task {task.task_id} for video {task.video_id} "
+                            f"failed: {error_msg}\n{error_details}"
+                        )
 
                 except Exception as e:
                     logger.error(f"Worker loop error: {e}")

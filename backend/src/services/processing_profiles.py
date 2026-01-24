@@ -162,9 +162,7 @@ class ProfileManager:
                 TaskType.FACE_DETECTION.value: WorkerConfig(
                     TaskType.FACE_DETECTION, 2, ResourceType.GPU, 3
                 ),
-                TaskType.OCR.value: WorkerConfig(
-                    TaskType.OCR, 2, ResourceType.GPU, 3
-                ),
+                TaskType.OCR.value: WorkerConfig(TaskType.OCR, 2, ResourceType.GPU, 3),
                 TaskType.PLACE_DETECTION.value: WorkerConfig(
                     TaskType.PLACE_DETECTION, 2, ResourceType.GPU, 3
                 ),
@@ -205,9 +203,7 @@ class ProfileManager:
                 TaskType.FACE_DETECTION.value: WorkerConfig(
                     TaskType.FACE_DETECTION, 1, ResourceType.GPU, 4
                 ),
-                TaskType.OCR.value: WorkerConfig(
-                    TaskType.OCR, 2, ResourceType.GPU, 2
-                ),
+                TaskType.OCR.value: WorkerConfig(TaskType.OCR, 2, ResourceType.GPU, 2),
                 TaskType.PLACE_DETECTION.value: WorkerConfig(
                     TaskType.PLACE_DETECTION, 1, ResourceType.GPU, 4
                 ),
@@ -248,9 +244,7 @@ class ProfileManager:
                 TaskType.FACE_DETECTION.value: WorkerConfig(
                     TaskType.FACE_DETECTION, 3, ResourceType.GPU, 1
                 ),
-                TaskType.OCR.value: WorkerConfig(
-                    TaskType.OCR, 2, ResourceType.GPU, 2
-                ),
+                TaskType.OCR.value: WorkerConfig(TaskType.OCR, 2, ResourceType.GPU, 2),
                 TaskType.PLACE_DETECTION.value: WorkerConfig(
                     TaskType.PLACE_DETECTION, 2, ResourceType.GPU, 2
                 ),
@@ -291,9 +285,7 @@ class ProfileManager:
                 TaskType.FACE_DETECTION.value: WorkerConfig(
                     TaskType.FACE_DETECTION, 1, ResourceType.GPU, 3
                 ),
-                TaskType.OCR.value: WorkerConfig(
-                    TaskType.OCR, 1, ResourceType.GPU, 4
-                ),
+                TaskType.OCR.value: WorkerConfig(TaskType.OCR, 1, ResourceType.GPU, 4),
                 TaskType.PLACE_DETECTION.value: WorkerConfig(
                     TaskType.PLACE_DETECTION, 1, ResourceType.GPU, 4
                 ),
