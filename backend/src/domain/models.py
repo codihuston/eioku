@@ -48,9 +48,6 @@ class Video:
         self.status = "failed"
 
 
-
-
-
 class PathConfig:
     """Domain model for PathConfig - pure business object."""
 

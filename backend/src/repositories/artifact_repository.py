@@ -125,9 +125,6 @@ class SqlArtifactRepository(ArtifactRepository):
                         f"Failed to sync projection for artifact {artifact_id}: {e}"
                     )
 
-            # Commit all projection syncs together
-            self.session.commit()
-
             return artifacts
 
         except Exception as e:

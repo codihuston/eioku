@@ -68,22 +68,22 @@ class FaceDetectionService:
         try:
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS)
-            
+
             frame_results = []
             frame_idx = 0
-            
+
             while cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
-                
+
                 # Sample frames based on sample_rate
                 if frame_idx % sample_rate == 0:
                     timestamp_sec = frame_idx / fps
-                    
+
                     # Run YOLO detection
                     results = self.model(frame, verbose=False)
-                    
+
                     # Process detections for this frame
                     detections = []
                     for result in results:
@@ -92,22 +92,31 @@ class FaceDetectionService:
                             # Get bounding box coordinates
                             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
                             confidence = float(box.conf[0].cpu().numpy())
-                            
-                            detections.append({
-                                "bbox": [float(x1), float(y1), float(x2), float(y2)],
-                                "confidence": confidence,
-                            })
-                    
+
+                            detections.append(
+                                {
+                                    "bbox": [
+                                        float(x1),
+                                        float(y1),
+                                        float(x2),
+                                        float(y2),
+                                    ],
+                                    "confidence": confidence,
+                                }
+                            )
+
                     # Only add frame if we detected faces
                     if detections:
-                        frame_results.append({
-                            "frame_number": frame_idx,
-                            "timestamp": timestamp_sec,
-                            "detections": detections,
-                        })
-                
+                        frame_results.append(
+                            {
+                                "frame_number": frame_idx,
+                                "timestamp": timestamp_sec,
+                                "detections": detections,
+                            }
+                        )
+
                 frame_idx += 1
-            
+
             cap.release()
 
             logger.info(f"Detected faces in {len(frame_results)} frames")

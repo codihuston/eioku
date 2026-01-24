@@ -345,117 +345,6 @@ class SceneDetectionWorker(TaskWorker):
         }
 
 
-class FaceDetectionWorker(TaskWorker):
-    """Worker for face detection tasks."""
-
-    def __init__(
-        self,
-        detection_handler,
-        video_repository: "VideoRepository",
-        model_profile: str = "balanced",
-    ):
-        super().__init__(TaskType.FACE_DETECTION)
-        self.detection_handler = detection_handler
-        self.video_repository = video_repository
-        self.model_profile = model_profile
-
-    def _do_work(self, task: Task) -> dict:
-        """Perform face detection."""
-        # Get video
-        video = self.video_repository.find_by_id(task.video_id)
-        if not video:
-            raise ValueError(f"Video not found: {task.video_id}")
-
-        # Process face detection with model_profile
-        success = self.detection_handler.process_face_detection_task(
-            task, video, model_profile=self.model_profile
-        )
-
-        if not success:
-            raise Exception("Face detection processing failed")
-
-        # Get detected faces for response
-        faces = self.detection_handler.get_detected_faces(task.video_id)
-
-        return {
-            "faces_detected": len(faces),
-        }
-
-
-class OcrWorker(TaskWorker):
-    """Worker for OCR text detection tasks."""
-
-    def __init__(
-        self,
-        ocr_handler,
-        video_repository: "VideoRepository",
-        model_profile: str = "balanced",
-    ):
-        super().__init__(TaskType.OCR)
-        self.ocr_handler = ocr_handler
-        self.video_repository = video_repository
-        self.model_profile = model_profile
-
-    def _do_work(self, task: Task) -> dict:
-        """Perform OCR text detection."""
-        # Get video
-        video = self.video_repository.find_by_id(task.video_id)
-        if not video:
-            raise ValueError(f"Video not found: {task.video_id}")
-
-        # Process OCR with model_profile
-        success = self.ocr_handler.process_ocr_task(
-            task, video, model_profile=self.model_profile
-        )
-
-        if not success:
-            raise Exception("OCR processing failed")
-
-        # Get detected text for response
-        text_artifacts = self.ocr_handler.get_detected_text(task.video_id)
-
-        return {
-            "text_detections": len(text_artifacts),
-        }
-
-
-class PlaceDetectionWorker(TaskWorker):
-    """Worker for place classification tasks."""
-
-    def __init__(
-        self,
-        detection_handler,
-        video_repository: "VideoRepository",
-        model_profile: str = "balanced",
-    ):
-        super().__init__(TaskType.PLACE_DETECTION)
-        self.detection_handler = detection_handler
-        self.video_repository = video_repository
-        self.model_profile = model_profile
-
-    def _do_work(self, task: Task) -> dict:
-        """Perform place detection."""
-        # Get video
-        video = self.video_repository.find_by_id(task.video_id)
-        if not video:
-            raise ValueError(f"Video not found: {task.video_id}")
-
-        # Process place detection with model_profile
-        success = self.detection_handler.process_place_detection_task(
-            task, video, model_profile=self.model_profile
-        )
-
-        if not success:
-            raise Exception("Place detection processing failed")
-
-        # Get detected places for response
-        places = self.detection_handler.get_detected_places(task.video_id)
-
-        return {
-            "places_detected": len(places),
-        }
-
-
 class WorkerPool:
     """Manages a pool of workers for a specific task type."""
 
@@ -636,11 +525,8 @@ class WorkerPool:
                                 f"failed: {result['error']}"
                             )
 
-                    except TimeoutError:
-                        error_msg = (
-                            f"Task timeout after {self.task_timeout} seconds "
-                            f"({self.task_timeout / 60:.1f} minutes)"
-                        )
+                    except Exception as e:
+                        error_msg = f"Worker execution failed: {str(e)}"
                         # Rollback session before updating task
                         try:
                             session.rollback()
@@ -715,7 +601,74 @@ class WorkerPool:
                 )
 
             return create_hash_worker
+        elif self.config.task_type == TaskType.TRANSCRIPTION:
+            from ..database.connection import get_db
+            from ..domain.schema_registry import SchemaRegistry
+            from ..repositories.artifact_repository import SqlArtifactRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from ..services.projection_sync_service import ProjectionSyncService
+            from .transcription_task_handler import TranscriptionTaskHandler
+
+            # Get settings from task_settings
+            model_name = self.task_settings.get("transcription_model", "base")
+
+            # Create transcription worker with dependencies
+            def create_transcription_worker():
+                # Create session in worker thread
+                session = next(get_db())
+                video_repo = SqlVideoRepository(session)
+                schema_registry = SchemaRegistry()
+                projection_sync = ProjectionSyncService(session)
+                artifact_repo = SqlArtifactRepository(
+                    session, schema_registry, projection_sync
+                )
+                transcription_handler = TranscriptionTaskHandler(
+                    artifact_repository=artifact_repo,
+                    schema_registry=schema_registry,
+                )
+                return TranscriptionWorker(
+                    transcription_handler=transcription_handler,
+                    video_repository=video_repo,
+                    model_profile=self.profile_name,
+                )
+
+            return create_transcription_worker
+        elif self.config.task_type == TaskType.SCENE_DETECTION:
+            from ..database.connection import get_db
+            from ..domain.schema_registry import SchemaRegistry
+            from ..repositories.artifact_repository import SqlArtifactRepository
+            from ..repositories.video_repository import SqlVideoRepository
+            from ..services.projection_sync_service import ProjectionSyncService
+            from .scene_detection_service import SceneDetectionService
+
+            # Get settings from task_settings (use defaults if not specified)
+            threshold = self.task_settings.get("scene_detection_threshold", 0.4)
+            min_scene_len = self.task_settings.get("scene_detection_min_length", 0.6)
+
+            # Create scene detection worker with dependencies
+            def create_scene_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
+                video_repo = SqlVideoRepository(session)
+                schema_registry = SchemaRegistry()
+                projection_sync = ProjectionSyncService(session)
+                artifact_repo = SqlArtifactRepository(
+                    session, schema_registry, projection_sync
+                )
+                scene_service = SceneDetectionService(
+                    threshold=threshold,
+                    min_scene_len=min_scene_len,
+                )
+                return SceneDetectionWorker(
+                    scene_service=scene_service,
+                    artifact_repository=artifact_repo,
+                    video_repository=video_repo,
+                    model_profile=self.profile_name,
+                )
+
+            return create_scene_detection_worker
         elif self.config.task_type == TaskType.OBJECT_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -750,6 +703,7 @@ class WorkerPool:
 
             return create_object_detection_worker
         elif self.config.task_type == TaskType.FACE_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -757,11 +711,15 @@ class WorkerPool:
             from .face_detection_task_handler import FaceDetectionTaskHandler
 
             # Get settings from task_settings
-            model_name = self.task_settings.get("face_detection_model", "yolov8n-face.pt")
+            model_name = self.task_settings.get(
+                "face_detection_model", "yolov8n-face.pt"
+            )
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
 
             # Create face detection worker with dependencies
-            def create_face_detection_worker(session):
+            def create_face_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -782,6 +740,7 @@ class WorkerPool:
 
             return create_face_detection_worker
         elif self.config.task_type == TaskType.OCR:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -794,7 +753,9 @@ class WorkerPool:
             gpu = self.task_settings.get("ocr_gpu", False)
 
             # Create OCR worker with dependencies
-            def create_ocr_worker(session):
+            def create_ocr_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)
@@ -816,6 +777,7 @@ class WorkerPool:
 
             return create_ocr_worker
         elif self.config.task_type == TaskType.PLACE_DETECTION:
+            from ..database.connection import get_db
             from ..domain.schema_registry import SchemaRegistry
             from ..repositories.artifact_repository import SqlArtifactRepository
             from ..repositories.video_repository import SqlVideoRepository
@@ -823,12 +785,16 @@ class WorkerPool:
             from .place_detection_task_handler import PlaceDetectionTaskHandler
 
             # Get settings from task_settings
-            model_name = self.task_settings.get("place_detection_model", "resnet18_places365")
+            model_name = self.task_settings.get(
+                "place_detection_model", "resnet18_places365"
+            )
             sample_rate = self.task_settings.get("frame_sampling_interval", 30)
             top_k = self.task_settings.get("place_detection_top_k", 5)
 
             # Create place detection worker with dependencies
-            def create_place_detection_worker(session):
+            def create_place_detection_worker():
+                # Create session in worker thread
+                session = next(get_db())
                 video_repo = SqlVideoRepository(session)
                 schema_registry = SchemaRegistry()
                 projection_sync = ProjectionSyncService(session)

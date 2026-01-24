@@ -206,10 +206,7 @@ class ProjectionSyncService:
                 """
                 INSERT INTO object_labels
                     (artifact_id, asset_id, label, confidence, start_ms, end_ms)
-                VALUES (
-                    :artifact_id, :asset_id, :label, :confidence,
-                    :start_ms, :end_ms
-                )
+                VALUES (:artifact_id, :asset_id, :label, :confidence, :start_ms, :end_ms)
                 ON CONFLICT (artifact_id) DO UPDATE
                 SET asset_id = EXCLUDED.asset_id,
                     label = EXCLUDED.label,
@@ -224,10 +221,7 @@ class ProjectionSyncService:
                 """
                 INSERT OR REPLACE INTO object_labels
                     (artifact_id, asset_id, label, confidence, start_ms, end_ms)
-                VALUES (
-                    :artifact_id, :asset_id, :label, :confidence,
-                    :start_ms, :end_ms
-                )
+                VALUES (:artifact_id, :asset_id, :label, :confidence, :start_ms, :end_ms)
                 """
             )
 
@@ -260,16 +254,38 @@ class ProjectionSyncService:
         cluster_id = payload.get("cluster_id")
         confidence = payload.get("confidence", 0.0)
 
-        # Insert into face_clusters projection table
-        sql = text(
-            """
-            INSERT OR REPLACE INTO face_clusters
-                (artifact_id, asset_id, cluster_id, confidence,
-                 start_ms, end_ms)
-            VALUES (:artifact_id, :asset_id, :cluster_id, :confidence,
-                    :start_ms, :end_ms)
-            """
-        )
+        # Determine if we're using PostgreSQL or SQLite
+        bind = self.session.bind
+        is_postgresql = bind.dialect.name == "postgresql"
+
+        if is_postgresql:
+            # PostgreSQL syntax
+            sql = text(
+                """
+                INSERT INTO face_clusters
+                    (artifact_id, asset_id, cluster_id, confidence,
+                     start_ms, end_ms)
+                VALUES (:artifact_id, :asset_id, :cluster_id, :confidence,
+                        :start_ms, :end_ms)
+                ON CONFLICT (artifact_id) DO UPDATE
+                SET asset_id = EXCLUDED.asset_id,
+                    cluster_id = EXCLUDED.cluster_id,
+                    confidence = EXCLUDED.confidence,
+                    start_ms = EXCLUDED.start_ms,
+                    end_ms = EXCLUDED.end_ms
+                """
+            )
+        else:
+            # SQLite syntax
+            sql = text(
+                """
+                INSERT OR REPLACE INTO face_clusters
+                    (artifact_id, asset_id, cluster_id, confidence,
+                     start_ms, end_ms)
+                VALUES (:artifact_id, :asset_id, :cluster_id, :confidence,
+                        :start_ms, :end_ms)
+                """
+            )
 
         self.session.execute(
             sql,

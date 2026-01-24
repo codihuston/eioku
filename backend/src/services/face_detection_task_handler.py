@@ -97,9 +97,9 @@ class FaceDetectionTaskHandler:
             model_profile = self._determine_model_profile(self.model_name)
 
             # Create one artifact per detection (frame-level granularity)
-            saved_count = 0
+            artifacts = []
             cluster_counter = 0  # Simple cluster ID generation
-            
+
             for frame_result in frame_results:
                 frame_number = frame_result["frame_number"]
                 timestamp_sec = frame_result["timestamp"]
@@ -108,7 +108,7 @@ class FaceDetectionTaskHandler:
                 for detection in detections:
                     bbox_coords = detection["bbox"]  # [x1, y1, x2, y2]
                     confidence = detection["confidence"]
-                    
+
                     # Generate a simple cluster ID for each detection
                     # In a real implementation, this would use face embeddings
                     cluster_id = f"face_{cluster_counter}"
@@ -149,9 +149,11 @@ class FaceDetectionTaskHandler:
                         created_at=datetime.utcnow(),
                     )
 
-                    # Save to artifact repository
-                    self.artifact_repository.create(artifact)
-                    saved_count += 1
+                    artifacts.append(artifact)
+
+            # Batch insert all artifacts
+            self.artifact_repository.batch_create(artifacts)
+            saved_count = len(artifacts)
 
             logger.info(
                 f"Face detection complete for video {video.video_id}. "
