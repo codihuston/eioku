@@ -138,7 +138,7 @@ class FindWithinVideoService:
 
         if is_postgresql:
             # PostgreSQL: Use tsvector and tsquery
-            # Convert query to tsquery format (space-separated words become AND)
+            # First try FTS, but fall back to ILIKE if query contains only stop words
             tsquery = query.replace(" ", " & ")
 
             sql = text(
@@ -167,6 +167,33 @@ class FindWithinVideoService:
                     "from_ms": from_ms,
                 },
             ).fetchall()
+
+            # If FTS returned no results, try case-insensitive LIKE search
+            if not rows:
+                sql_fallback = text(
+                    f"""
+                    SELECT
+                        artifact_id,
+                        start_ms,
+                        end_ms,
+                        text as snippet
+                    FROM transcript_fts
+                    WHERE text ILIKE :query
+                      AND asset_id = :asset_id
+                      AND start_ms {operator} :from_ms
+                    ORDER BY start_ms {order}
+                    LIMIT 10
+                    """
+                )
+
+                rows = self.session.execute(
+                    sql_fallback,
+                    {
+                        "query": f"%{query}%",
+                        "asset_id": asset_id,
+                        "from_ms": from_ms,
+                    },
+                ).fetchall()
 
         else:
             # SQLite: Use FTS5 MATCH syntax
@@ -271,7 +298,7 @@ class FindWithinVideoService:
 
         if is_postgresql:
             # PostgreSQL: Use tsvector and tsquery
-            # Convert query to tsquery format (space-separated words become AND)
+            # First try FTS, but fall back to ILIKE if query contains only stop words
             tsquery = query.replace(" ", " & ")
 
             sql = text(
@@ -300,6 +327,33 @@ class FindWithinVideoService:
                     "from_ms": from_ms,
                 },
             ).fetchall()
+
+            # If FTS returned no results, try case-insensitive LIKE search
+            if not rows:
+                sql_fallback = text(
+                    f"""
+                    SELECT
+                        artifact_id,
+                        start_ms,
+                        end_ms,
+                        text as snippet
+                    FROM ocr_fts
+                    WHERE text ILIKE :query
+                      AND asset_id = :asset_id
+                      AND start_ms {operator} :from_ms
+                    ORDER BY start_ms {order}
+                    LIMIT 10
+                    """
+                )
+
+                rows = self.session.execute(
+                    sql_fallback,
+                    {
+                        "query": f"%{query}%",
+                        "asset_id": asset_id,
+                        "from_ms": from_ms,
+                    },
+                ).fetchall()
 
         else:
             # SQLite: Use FTS5 MATCH syntax

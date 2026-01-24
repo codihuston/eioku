@@ -73,7 +73,7 @@ async def jump_to_artifact(
         None, description="Filter by face cluster ID (for face)"
     ),
     min_confidence: float = Query(
-        0.0, description="Minimum confidence threshold", ge=0.0, le=1.0
+        -float("inf"), description="Minimum confidence threshold"
     ),
     selection: str | None = Query(
         None,
