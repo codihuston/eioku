@@ -9,7 +9,7 @@ import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.health import router as health_router
+from .api import health, inference
 from .services.model_manager import ModelManager
 
 # Configure logging
@@ -43,6 +43,10 @@ async def lifespan(app: FastAPI):
         model_cache_dir = os.getenv("MODEL_CACHE_DIR", "/models")
         MODEL_MANAGER = ModelManager(cache_dir=model_cache_dir)
         logger.info(f"Model cache directory: {model_cache_dir}")
+
+        # Set globals for inference and health endpoints
+        inference.set_globals(GPU_SEMAPHORE, MODEL_MANAGER, gpu_available)
+        health.set_globals(MODELS_REGISTRY, MODEL_MANAGER)
 
         # Check GPU availability
         gpu_available = MODEL_MANAGER.detect_gpu()
@@ -132,7 +136,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(health_router)
+app.include_router(health.router)
+app.include_router(inference.router)
 
 
 @app.get("/")

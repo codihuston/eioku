@@ -64,38 +64,38 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 4. Implement inference endpoints
 
-- [ ] 4.1 Implement object detection endpoint (/infer/objects)
+- [x] 4.1 Implement object detection endpoint (/infer/objects)
   - Create ObjectDetectionRequest and ObjectDetectionResponse models
   - Implement GPU semaphore acquisition
   - Call ObjectDetectionService and return structured response
   - Include config_hash, input_hash, run_id in response
   - _Requirements: 3.1, 3.8, 3.9, 5.1_
 
-- [ ] 4.2 Implement face detection endpoint (/infer/faces)
+- [x] 4.2 Implement face detection endpoint (/infer/faces)
   - Create FaceDetectionRequest and FaceDetectionResponse models
   - Implement GPU semaphore acquisition
   - Call FaceDetectionService and return structured response
   - _Requirements: 3.2, 3.8, 3.9_
 
-- [ ] 4.3 Implement transcription endpoint (/infer/transcribe)
+- [x] 4.3 Implement transcription endpoint (/infer/transcribe)
   - Create TranscriptionRequest and TranscriptionResponse models
   - Implement GPU semaphore acquisition
   - Call TranscriptionService and return structured response
   - _Requirements: 3.3, 3.8, 3.9_
 
-- [ ] 4.4 Implement OCR endpoint (/infer/ocr)
+- [x] 4.4 Implement OCR endpoint (/infer/ocr)
   - Create OCRRequest and OCRResponse models
   - Implement GPU semaphore acquisition
   - Call OCRService and return structured response
   - _Requirements: 3.4, 3.8, 3.9_
 
-- [ ] 4.5 Implement place detection endpoint (/infer/places)
+- [x] 4.5 Implement place detection endpoint (/infer/places)
   - Create PlaceDetectionRequest and PlaceDetectionResponse models
   - Implement GPU semaphore acquisition
   - Call PlaceDetectionService and return structured response
   - _Requirements: 3.5, 3.8, 3.9_
 
-- [ ] 4.6 Implement scene detection endpoint (/infer/scenes)
+- [x] 4.6 Implement scene detection endpoint (/infer/scenes)
   - Create SceneDetectionRequest and SceneDetectionResponse models
   - Implement GPU semaphore acquisition
   - Call SceneDetectionService and return structured response
