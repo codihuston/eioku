@@ -35,7 +35,7 @@ class JumpNavigationService:
         from_ms: int,
         label: str | None = None,
         cluster_id: str | None = None,
-        min_confidence: float = 0.0,
+        min_confidence: float = -float("inf"),
         selection: SelectionPolicy | None = None,
     ) -> dict | None:
         """
@@ -66,13 +66,17 @@ class JumpNavigationService:
             or self.policy_manager.get_default_policy(asset_id, artifact_type)
         )
 
-        # Get artifacts starting from the given timestamp
+        # Get artifacts starting AFTER the given timestamp
+        # We need to query all artifacts and filter manually since the repo
+        # uses >= instead of > for start_ms
         artifacts = self.artifact_repo.get_by_asset(
             asset_id=asset_id,
             artifact_type=artifact_type,
-            start_ms=from_ms,
             selection=policy,
         )
+
+        # Filter to only artifacts that start after from_ms
+        artifacts = [a for a in artifacts if a.span_start_ms > from_ms]
 
         # Filter by label/cluster if specified
         filtered = self._filter_artifacts(artifacts, label, cluster_id, min_confidence)
@@ -103,7 +107,7 @@ class JumpNavigationService:
         from_ms: int,
         label: str | None = None,
         cluster_id: str | None = None,
-        min_confidence: float = 0.0,
+        min_confidence: float = -float("inf"),
         selection: SelectionPolicy | None = None,
     ) -> dict | None:
         """
@@ -135,12 +139,16 @@ class JumpNavigationService:
         )
 
         # Get artifacts ending before the given timestamp
+        # We need to query all artifacts and filter manually since the repo
+        # uses <= instead of < for end_ms
         artifacts = self.artifact_repo.get_by_asset(
             asset_id=asset_id,
             artifact_type=artifact_type,
-            end_ms=from_ms,
             selection=policy,
         )
+
+        # Filter to only artifacts that end before from_ms
+        artifacts = [a for a in artifacts if a.span_end_ms <= from_ms]
 
         # Filter by label/cluster if specified
         filtered = self._filter_artifacts(artifacts, label, cluster_id, min_confidence)

@@ -123,11 +123,22 @@ def test_get_policy_retrieves_existing(manager, test_video):
 
 
 def test_get_default_policy(manager):
-    """Test getting default policy."""
+    """Test getting default policy with empty parameters returns None."""
     default = manager.get_default_policy()
 
-    assert default.asset_id == ""
-    assert default.artifact_type == ""
+    # When called with empty strings, should return None (no default policy)
+    assert default is None
+
+
+def test_get_default_policy_with_params(manager, test_video):
+    """Test getting default policy with asset_id and artifact_type."""
+    default = manager.get_default_policy(
+        asset_id=test_video.video_id, artifact_type="transcript.segment"
+    )
+
+    assert default is not None
+    assert default.asset_id == test_video.video_id
+    assert default.artifact_type == "transcript.segment"
     assert default.mode == "latest"
     assert default.updated_at is not None
 

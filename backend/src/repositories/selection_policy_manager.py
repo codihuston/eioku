@@ -79,7 +79,7 @@ class SelectionPolicyManager:
 
     def get_default_policy(
         self, asset_id: str = "", artifact_type: str = ""
-    ) -> SelectionPolicy:
+    ) -> SelectionPolicy | None:
         """
         Get default selection policy (latest).
 
@@ -88,16 +88,20 @@ class SelectionPolicyManager:
             artifact_type: Optional artifact type for the default policy
 
         Returns:
-            A default SelectionPolicy with mode="latest"
+            A default SelectionPolicy with mode="latest" if asset_id and artifact_type
+            are provided, None otherwise (indicating no filtering should be applied)
 
         Note:
-            When asset_id and artifact_type are empty strings, this creates
-            a policy template that can be used for filtering logic without
-            being stored in the database. The validation in SelectionPolicy
-            is relaxed for this use case.
+            Returns None when asset_id or artifact_type are empty strings to indicate
+            that no default policy should be applied. This allows the query to return
+            all artifacts without filtering by run_id.
         """
-        # Create a policy with mode="latest" that can be used as a default
-        # The empty asset_id/artifact_type indicates this is a template policy
+        # Return None if asset_id or artifact_type are empty
+        # This indicates no default policy should be applied
+        if not asset_id or not artifact_type:
+            return None
+
+        # Create a policy with mode="latest" for the given asset/type
         policy = object.__new__(SelectionPolicy)
         policy.asset_id = asset_id
         policy.artifact_type = artifact_type
