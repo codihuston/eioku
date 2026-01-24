@@ -122,7 +122,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 6. Checkpoint - ML Service Complete
 
-- [ ] 6.1 Ensure all ML Service tests pass
+- [x] 6.1 Ensure all ML Service tests pass
   - Run pytest on ml-service/tests/
   - Verify all endpoints respond correctly
   - Verify GPU semaphore limits concurrent requests
