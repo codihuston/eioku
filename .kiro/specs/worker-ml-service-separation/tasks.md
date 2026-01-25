@@ -353,14 +353,14 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 19. Create separate entry points
 
-- [ ] 19.1 Create backend/src/main_api.py
+- [x] 19.1 Create backend/src/main_api.py
   - FastAPI app for API Service only
   - No arq consumer initialization
   - Database connection pool (max_size=20)
   - Redis connection for job enqueueing
   - _Requirements: 9.3, 9.4_
 
-- [ ] 19.2 Create backend/src/main_worker.py
+- [x] 19.2 Create backend/src/main_worker.py
   - arq worker entry point
   - No HTTP endpoints
   - Database connection pool (max_size=10)
