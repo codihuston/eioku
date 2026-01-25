@@ -194,7 +194,7 @@ This implementation plan breaks down the service separation into discrete, testa
   - Acknowledge job in Redis (XACK)
   - _Requirements: 2.8, 2.9, 2.10, 5.3_
 
-- [ ] 10.3 Create artifact envelope transformation logic
+- [x] 10.3 Create artifact envelope transformation logic
   - Transform ML response to ArtifactEnvelopes (when received from ml_jobs)
   - Extract individual detections/segments from batch response
   - Copy provenance metadata (config_hash, input_hash, etc.)
