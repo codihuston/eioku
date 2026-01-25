@@ -206,7 +206,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 11. Implement ML Service job consumption from ml_jobs queue
 
-- [ ] 11.1 Create ML Service arq worker configuration
+- [x] 11.1 Create ML Service arq worker configuration
   - Configure arq to consume from ml_jobs queue
   - Set up consumer group for ml_jobs
   - Configure max_jobs, job_timeout, max_tries
