@@ -27,6 +27,7 @@ httpx = "^0.25.2"
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"
 pytest = "^7.4.3"
+pytest-asyncio = "^0.21.0"
 
 [build-system]
 requires = ["poetry-core"]
