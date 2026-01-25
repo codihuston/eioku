@@ -257,13 +257,13 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 14. Update video discovery to auto-create tasks
 
-- [ ] 14.1 Create VideoDiscoveryService
+- [x] 14.1 Create VideoDiscoveryService
   - Implement discover_and_queue_tasks() to auto-create 6 tasks per video
   - Implement _get_default_config() for each task type
   - Call JobProducer to enqueue tasks to appropriate queues
   - _Requirements: 1.2, 1.3_
 
-- [ ] 14.2 Integrate VideoDiscoveryService into video discovery workflow
+- [x] 14.2 Integrate VideoDiscoveryService into video discovery workflow
   - Update existing video discovery to call VideoDiscoveryService
   - Ensure tasks are auto-created and auto-queued on video discovery
   - _Requirements: 1.2, 1.3_

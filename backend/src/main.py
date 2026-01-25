@@ -82,22 +82,43 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Repositories created")
 
         logger.info("7️⃣ Running auto-discovery...")
-        discovery_service = VideoDiscoveryService(path_manager, video_repo)
+        from src.services.job_producer import JobProducer
+
+        job_producer = JobProducer()
+        await job_producer.initialize()
+
+        discovery_service = VideoDiscoveryService(path_manager, video_repo, job_producer)
         discovered_videos = discovery_service.discover_videos()
         logger.info(f"✅ Discovered {len(discovered_videos)} videos")
 
-        logger.info("8️⃣ Creating tasks for discovered videos...")
-        tasks_created = orchestrator.process_discovered_videos()
-        logger.info(f"✅ Created {tasks_created} tasks for discovered videos")
+        logger.info("8️⃣ Auto-creating and enqueueing ML tasks for discovered videos...")
+        tasks_created = 0
+        for video in discovered_videos:
+            if video.status == "discovered":
+                try:
+                    await discovery_service.discover_and_queue_tasks(video.file_path)
+                    tasks_created += 6  # 6 tasks per video
+                    logger.info(
+                        f"✅ Auto-created and queued 6 ML tasks for video {video.video_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to auto-create tasks for video {video.video_id}: {e}",
+                        exc_info=True,
+                    )
+                    # Continue with next video instead of failing entire startup
+
+        await job_producer.close()
+        logger.info(f"✅ Created and queued {tasks_created} ML tasks")
 
         logger.info("9️⃣ Loading pending tasks from database...")
-        # Load all pending tasks and enqueue them
+        # Note: Pending tasks are now managed by arq job queue in Redis
+        # The Worker Service will consume jobs from Redis and process them
         pending_tasks = task_repo.find_by_status("pending")
-        for task in pending_tasks:
-            task_type = TaskType(task.task_type)
-            priority = orchestrator._get_task_priority(task_type)
-            orchestrator.task_queues.enqueue(task, priority)
-        logger.info(f"✅ Loaded {len(pending_tasks)} pending tasks into queues")
+        logger.info(
+            f"✅ Found {len(pending_tasks)} pending tasks in database "
+            f"(will be processed by Worker Service via Redis)"
+        )
 
         logger.info("🔟 Loading processing profile...")
         from dataclasses import asdict

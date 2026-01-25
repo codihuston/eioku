@@ -1,14 +1,26 @@
 """Video file discovery service."""
 
 from pathlib import Path
+from uuid import uuid4
 
 from ..domain.models import PathConfig, Video
 from ..repositories.interfaces import VideoRepository
 from ..utils.print_logger import get_logger
+from .job_producer import JobProducer
 from .path_config_manager import PathConfigManager
 
 # Configure logging
 logger = get_logger(__name__)
+
+# Task types to auto-create for each discovered video
+TASK_TYPES = [
+    "object_detection",
+    "face_detection",
+    "transcription",
+    "ocr",
+    "place_detection",
+    "scene_detection",
+]
 
 
 class VideoDiscoveryService:
@@ -20,9 +32,11 @@ class VideoDiscoveryService:
         self,
         path_config_manager: PathConfigManager,
         video_repository: VideoRepository,
+        job_producer: JobProducer | None = None,
     ):
         self.path_config_manager = path_config_manager
         self.video_repository = video_repository
+        self.job_producer = job_producer
 
     def discover_videos(self) -> list[Video]:
         """Discover all video files in configured paths."""
@@ -136,3 +150,142 @@ class VideoDiscoveryService:
                 logger.info(f"Removed missing video {video.video_id} from database")
 
         return missing_videos
+
+    async def discover_and_queue_tasks(self, video_path: str) -> str:
+        """Discover video and auto-create tasks for all ML operations.
+
+        This method:
+        1. Checks if video already exists in database
+        2. Creates video record if new
+        3. Auto-creates 6 tasks (one for each ML operation) in PostgreSQL
+        4. Enqueues tasks to appropriate queues via JobProducer
+
+        Args:
+            video_path: Path to video file
+
+        Returns:
+            video_id of the discovered/existing video
+
+        Raises:
+            ValueError: If video file doesn't exist or JobProducer not initialized
+        """
+        if not self.job_producer:
+            raise ValueError("JobProducer not initialized. Cannot auto-queue tasks.")
+
+        # Check if video file exists
+        video_file = Path(video_path)
+        if not video_file.exists():
+            raise ValueError(f"Video file not found: {video_path}")
+
+        logger.info(f"Discovering and queueing tasks for: {video_path}")
+
+        # Check if video already exists
+        existing = self.video_repository.find_by_path(video_path)
+        if existing:
+            logger.info(f"Video already exists: {existing.video_id}")
+            return existing.video_id
+
+        # Create video record
+        video = self._create_video_from_file(video_file)
+        if not video:
+            raise ValueError(f"Failed to create video record for: {video_path}")
+
+        logger.info(f"Created video record: {video.video_id}")
+
+        # Auto-create tasks for all ML operations
+        from ..domain.models import Task
+        from ..repositories.task_repository import SQLAlchemyTaskRepository
+
+        task_repo = SQLAlchemyTaskRepository(self.video_repository.session)
+
+        for task_type in TASK_TYPES:
+            task_id = str(uuid4())
+
+            # Get default config for task type
+            config = self._get_default_config(task_type)
+
+            # Create task record in PostgreSQL
+            task = Task(
+                task_id=task_id,
+                video_id=video.video_id,
+                task_type=task_type,
+                status="pending",
+                priority=1,
+            )
+            try:
+                task_repo.save(task)
+                logger.info(
+                    f"Created task record {task_id} ({task_type}) for video {video.video_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to create task record {task_id} ({task_type}): {e}",
+                    exc_info=True,
+                )
+                raise
+
+            # Enqueue job to Redis
+            try:
+                await self.job_producer.enqueue_task(
+                    task_id=task_id,
+                    task_type=task_type,
+                    video_id=video.video_id,
+                    video_path=video_path,
+                    config=config,
+                )
+                logger.info(
+                    f"Enqueued task {task_id} ({task_type}) for video {video.video_id}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to enqueue task {task_id} ({task_type}): {e}",
+                    exc_info=True,
+                )
+                raise
+
+        logger.info(
+            f"Successfully discovered and queued all tasks for video {video.video_id}"
+        )
+        return video.video_id
+
+    def _get_default_config(self, task_type: str) -> dict:
+        """Get default configuration for task type.
+
+        Args:
+            task_type: Type of task (e.g., 'object_detection')
+
+        Returns:
+            Dictionary with default configuration for the task type
+        """
+        configs = {
+            "object_detection": {
+                "model_name": "yolov8n.pt",
+                "frame_interval": 30,
+                "confidence_threshold": 0.5,
+                "model_profile": "balanced",
+            },
+            "face_detection": {
+                "model_name": "yolov8n-face.pt",
+                "frame_interval": 30,
+                "confidence_threshold": 0.5,
+            },
+            "transcription": {
+                "model_name": "large-v3",
+                "language": None,
+                "vad_filter": True,
+            },
+            "ocr": {
+                "frame_interval": 60,
+                "languages": ["en"],
+                "use_gpu": True,
+            },
+            "place_detection": {
+                "frame_interval": 60,
+                "top_k": 5,
+            },
+            "scene_detection": {
+                "threshold": 0.4,
+                "min_scene_length": 0.6,
+            },
+        }
+        return configs.get(task_type, {})
