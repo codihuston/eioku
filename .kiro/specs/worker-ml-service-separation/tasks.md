@@ -134,13 +134,13 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 7. Create JobProducer with GPU/CPU routing
 
-- [ ] 7.1 Create JobProducer class in backend/src/services/
+- [x] 7.1 Create JobProducer class in backend/src/services/
   - Implement _get_queue_name() to route tasks to gpu_jobs or cpu_jobs
   - Implement enqueue_task() to enqueue to appropriate queue
   - Map task types to GPU/CPU requirements
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
 
-- [ ]* 7.2 Write unit test for JobProducer
+- [x]* 7.2 Write unit test for JobProducer
   - Test GPU task routing to gpu_jobs
   - Test CPU task routing to cpu_jobs
   - Test job_id format "ml_{task_id}"
