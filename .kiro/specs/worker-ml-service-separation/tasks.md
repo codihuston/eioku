@@ -148,14 +148,14 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 8. Create ML Client for Worker Service
 
-- [ ] 8.1 Create MLClient class in backend/src/services/
+- [x] 8.1 Create MLClient class in backend/src/services/
   - Implement async httpx client with connection pooling
   - Implement infer() method for each task type
   - Set timeout to 600 seconds for long-running inference
   - Handle HTTP errors and retry logic
   - _Requirements: 18.1, 18.2, 18.3, 18.4_
 
-- [ ]* 8.2 Write unit test for MLClient
+- [x]* 8.2 Write unit test for MLClient
   - Test HTTP requests to ML Service
   - Test response parsing
   - Test timeout handling
