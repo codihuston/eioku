@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1.4
+# Worker service Dockerfile - runs arq workers for job processing
+
+FROM ubuntu:22.04
+
+# Install Python 3.10 and dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3-pip \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN python3 -m pip install --no-cache-dir poetry
+
+WORKDIR /app
+
+# Copy pyproject.toml and poetry.lock
+COPY pyproject.toml poetry.lock README.md ./
+
+# Configure Poetry
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=0 \
+    POETRY_VIRTUALENVS_PATH=/opt/venv \
+    POETRY_CACHE_DIR=/root/.cache/pypoetry
+
+# Install dependencies with BuildKit cache
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    poetry install --no-root
+
+# Add venv to PATH
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Worker service - no HTTP server, just arq worker
+CMD ["poetry", "run", "arq", "src.workers.worker_config.WorkerSettings"]
