@@ -17,7 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from src.database.connection import Base
-from src.main import app
+from src.main_api import app
 from src.repositories.task_repository import SQLAlchemyTaskRepository
 
 # Set testing mode to prevent worker pools from starting

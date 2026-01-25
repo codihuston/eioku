@@ -4,7 +4,7 @@ import tempfile
 from fastapi.testclient import TestClient
 
 from src.database.migrations import run_migrations
-from src.main import app
+from src.main_api import app
 
 
 def test_migration_runner_creates_database():
