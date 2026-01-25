@@ -228,7 +228,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 12. Implement reconciler
 
-- [ ] 12.1 Create Reconciler class in backend/src/workers/
+- [x] 12.1 Create Reconciler class in backend/src/workers/
   - Implement _sync_pending_tasks() to re-enqueue orphaned PENDING tasks
   - Implement _sync_running_tasks() to sync RUNNING tasks with Redis state
   - Implement _alert_long_running_tasks() to alert (never auto-kill)
