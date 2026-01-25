@@ -273,7 +273,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 14. Add manual task enqueueing endpoint
 
-- [ ] 14.1 Create POST /tasks/{task_id}/enqueue endpoint
+- [x] 15.1 Create POST /tasks/{task_id}/enqueue endpoint
   - Verify task exists and is in PENDING status
   - Call JobProducer to enqueue task
   - Return job_id and status
