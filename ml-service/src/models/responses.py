@@ -34,7 +34,7 @@ class Segment(BaseModel):
     start_ms: int = Field(..., description="Start time in milliseconds")
     end_ms: int = Field(..., description="End time in milliseconds")
     text: str = Field(..., description="Segment text")
-    confidence: float = Field(..., ge=0, le=1, description="Confidence score")
+    confidence: float | None = Field(default=None, ge=0, le=1, description="Confidence score (if available)")
     words: list[dict] | None = Field(default=None, description="Word-level details")
 
 

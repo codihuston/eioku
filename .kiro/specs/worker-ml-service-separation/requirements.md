@@ -7,8 +7,8 @@ This document specifies the requirements for separating the monolithic Eioku bac
 ## Glossary
 
 - **API Service**: FastAPI server handling REST endpoints, business logic, and database management
-- **Worker Service**: arq-based job consumer that orchestrates ML task execution
-- **ML Service**: Stateless FastAPI server exposing HTTP endpoints for ML inference operations
+- **Worker Service**: arq-based job consumer that orchestrates ML task execution and result polling
+- **ML Service**: arq-based job consumer that executes ML inference and persists results to PostgreSQL
 - **Task**: A unit of work representing one ML operation on a video (e.g., object detection, transcription)
 - **Job**: A Redis-backed arq job representing a task's execution in the queue
 - **Artifact**: Result data from ML inference (detections, transcriptions, etc.) stored in PostgreSQL
@@ -36,9 +36,9 @@ This document specifies the requirements for separating the monolithic Eioku bac
 7. WHEN the API_Service starts, THE API_Service SHALL establish connection pool to PostgreSQL (max_size=20)
 8. WHEN the API_Service starts, THE API_Service SHALL establish connection to Redis for job enqueueing
 
-### Requirement 2: Worker Service Job Consumption
+### Requirement 2: Worker Service Job Consumption & Result Polling
 
-**User Story:** As a system operator, I want the Worker Service to consume jobs from Redis and dispatch them to the ML Service, so that ML tasks execute asynchronously and independently from the API.
+**User Story:** As a system operator, I want the Worker Service to consume jobs from Redis and poll for results, so that ML tasks execute asynchronously without blocking the Worker on long TCP connections.
 
 #### Acceptance Criteria
 
@@ -48,36 +48,39 @@ This document specifies the requirements for separating the monolithic Eioku bac
 4. WHEN GPU_MODE is set to auto, THE Worker_Service SHALL detect GPU availability and consume from appropriate queue
 5. WHEN the Worker_Service starts, THE Worker_Service SHALL connect to Redis and begin consuming jobs from the appropriate queue
 6. WHEN a job is consumed, THE Worker_Service SHALL update the corresponding task status to RUNNING in PostgreSQL
-7. WHEN a job is consumed, THE Worker_Service SHALL dispatch an HTTP request to the ML_Service with task parameters
-8. WHEN the ML_Service returns results, THE Worker_Service SHALL batch insert artifacts into PostgreSQL
-9. WHEN artifacts are inserted, THE Worker_Service SHALL update the task status to COMPLETED in PostgreSQL
-10. WHEN the Worker_Service completes a job, THE Worker_Service SHALL acknowledge the job in Redis (XACK)
-11. THE Worker_Service SHALL support configurable concurrency (max_jobs parameter)
-12. THE Worker_Service SHALL NOT expose HTTP endpoints (no REST API)
-13. WHEN the Worker_Service starts, THE Worker_Service SHALL establish connection pool to PostgreSQL (max_size=10)
+7. WHEN a job is consumed, THE Worker_Service SHALL enqueue the job to the ml_jobs queue for the ML_Service to process
+8. WHEN a job is enqueued to ml_jobs, THE Worker_Service SHALL poll PostgreSQL for artifact completion (checking artifacts table for task_id)
+9. WHEN artifacts are detected in PostgreSQL for the task, THE Worker_Service SHALL verify all expected artifacts are present
+10. WHEN all artifacts are present, THE Worker_Service SHALL update the task status to COMPLETED in PostgreSQL
+11. WHEN the Worker_Service completes a job, THE Worker_Service SHALL acknowledge the job in Redis (XACK)
+12. THE Worker_Service SHALL support configurable concurrency (max_jobs parameter)
+13. THE Worker_Service SHALL NOT expose HTTP endpoints (no REST API)
+14. WHEN the Worker_Service starts, THE Worker_Service SHALL establish connection pool to PostgreSQL (max_size=10)
+15. WHEN polling for results, THE Worker_Service SHALL use exponential backoff to avoid excessive database queries
+16. WHEN polling timeout is exceeded, THE Worker_Service SHALL mark task as FAILED and allow arq to retry
 
-### Requirement 3: ML Service Inference Endpoints
+### Requirement 3: ML Service Job Consumption & Result Persistence
 
-**User Story:** As a Worker Service, I want to call stateless HTTP endpoints for ML operations, so that I can dispatch inference tasks without managing ML models locally.
+**User Story:** As an ML Service, I want to consume inference jobs from a shared Redis queue and persist results to PostgreSQL, so that I can process ML tasks asynchronously without blocking the Worker Service.
 
 #### Acceptance Criteria
 
-1. THE ML_Service SHALL expose POST /infer/objects endpoint for object detection
-2. THE ML_Service SHALL expose POST /infer/faces endpoint for face detection
-3. THE ML_Service SHALL expose POST /infer/transcribe endpoint for transcription
-4. THE ML_Service SHALL expose POST /infer/ocr endpoint for optical character recognition
-5. THE ML_Service SHALL expose POST /infer/places endpoint for place classification
-6. THE ML_Service SHALL expose POST /infer/scenes endpoint for scene detection
-7. THE ML_Service SHALL expose GET /health endpoint returning model status and GPU availability
-8. WHEN an inference endpoint receives a request, THE ML_Service SHALL return structured results including detections/classifications and provenance metadata
-9. WHEN an inference endpoint receives a request, THE ML_Service SHALL include config_hash and input_hash in the response for reproducibility
-10. THE ML_Service SHALL NOT access PostgreSQL directly
-11. THE ML_Service SHALL NOT consume jobs from Redis
-12. WHEN the ML_Service starts, THE ML_Service SHALL lazy-load ML models on first request to that endpoint
+1. WHEN the ML_Service starts, THE ML_Service SHALL connect to Redis and begin consuming jobs from the ml_jobs queue
+2. WHEN the ML_Service consumes a job, THE ML_Service SHALL read task_id, task_type, video_id, video_path, and config from the job payload
+3. WHEN the ML_Service processes a job, THE ML_Service SHALL execute the appropriate ML inference (object detection, face detection, etc.)
+4. WHEN the ML_Service completes inference, THE ML_Service SHALL create ArtifactEnvelopes with detections/classifications and provenance metadata
+5. WHEN the ML_Service creates artifacts, THE ML_Service SHALL include config_hash, input_hash, run_id, producer, and model_profile in each envelope
+6. WHEN the ML_Service completes a job, THE ML_Service SHALL batch insert all ArtifactEnvelopes to PostgreSQL in a single transaction
+7. WHEN artifacts are inserted successfully, THE ML_Service SHALL acknowledge the job in Redis (XACK)
+8. WHEN inference fails, THE ML_Service SHALL NOT acknowledge the job (allow arq to retry)
+9. THE ML_Service SHALL expose GET /health endpoint returning model status and GPU availability
+10. WHEN the ML_Service starts, THE ML_Service SHALL lazy-load ML models on first request to that endpoint
+11. THE ML_Service SHALL NOT expose inference HTTP endpoints (no /infer/* endpoints)
+12. THE ML_Service SHALL NOT call Worker Service or any other service
 
 ### Requirement 4: Job Queue & Redis Integration
 
-**User Story:** As a system operator, I want jobs to flow through Redis with arq, so that tasks can be reliably queued and processed asynchronously.
+**User Story:** As a system operator, I want jobs to flow through Redis with arq using a shared queue pattern, so that tasks can be reliably queued and processed asynchronously by both Worker and ML Services.
 
 #### Acceptance Criteria
 
@@ -87,12 +90,14 @@ This document specifies the requirements for separating the monolithic Eioku bac
 4. WHEN a job can run on CPU, THE API_Service SHALL enqueue it to the cpu_jobs queue
 5. WHEN a job is enqueued, THE API_Service SHALL assign a unique job_id in format "ml_{task_id}" for deduplication
 6. WHEN a job is enqueued, THE API_Service SHALL set _queue_name to either gpu_jobs or cpu_jobs based on task type
-7. WHEN the Worker_Service consumes a job, THE Worker_Service SHALL use arq's XREADGROUP to read from the appropriate consumer group
-8. WHEN a job completes successfully, THE Worker_Service SHALL acknowledge it via XACK
-9. WHEN a job fails, THE Worker_Service SHALL allow arq to retry with exponential backoff (max_tries=3)
-10. THE Redis instance SHALL use Valkey (Linux Foundation fork) for persistence and reliability
-11. WHEN Redis is configured, THE system SHALL enable AOF (Append-Only File) persistence for durability
-12. THE system SHALL maintain separate consumer groups for gpu_jobs and cpu_jobs queues
+7. WHEN the Worker_Service consumes a job from gpu_jobs or cpu_jobs, THE Worker_Service SHALL use arq's XREADGROUP to read from the appropriate consumer group
+8. WHEN the Worker_Service consumes a job, THE Worker_Service SHALL enqueue it to the ml_jobs queue for the ML_Service to process
+9. WHEN the ML_Service consumes a job from ml_jobs, THE ML_Service SHALL use arq's XREADGROUP to read from the ml_jobs consumer group
+10. WHEN a job completes successfully, THE service SHALL acknowledge it via XACK
+11. WHEN a job fails, THE service SHALL allow arq to retry with exponential backoff (max_tries=3)
+12. THE Redis instance SHALL use Valkey (Linux Foundation fork) for persistence and reliability
+13. WHEN Redis is configured, THE system SHALL enable AOF (Append-Only File) persistence for durability
+14. THE system SHALL maintain separate consumer groups for gpu_jobs, cpu_jobs, and ml_jobs queues
 
 ### Requirement 5: Task Status Synchronization
 
@@ -288,19 +293,7 @@ This document specifies the requirements for separating the monolithic Eioku bac
 10. WHEN the ML_Service receives GET /health request, THE ML_Service SHALL return GPU availability, device info, and memory usage
 11. IF any model failed to initialize, THE GET /health endpoint SHALL return status=degraded or unhealthy
 
-### Requirement 18: HTTP Client & Communication
-
-**User Story:** As a Worker Service, I want reliable HTTP communication with the ML Service, so that inference requests are robust and efficient.
-
-#### Acceptance Criteria
-
-1. THE Worker_Service SHALL use httpx async client for HTTP requests to ML_Service
-2. WHEN the Worker_Service makes HTTP requests, THE Worker_Service SHALL use connection pooling
-3. WHEN the Worker_Service makes HTTP requests, THE Worker_Service SHALL set timeout to 600 seconds (for long-running inference)
-4. WHEN the ML_Service is slow to respond, THE Worker_Service SHALL wait without blocking other jobs
-5. WHEN an HTTP request fails, THE Worker_Service SHALL allow arq to retry the job
-
-### Requirement 19: Job Deduplication & Idempotency
+### Requirement 18: Job Deduplication & Idempotency
 
 **User Story:** As a system operator, I want jobs to be deduplicated, so that duplicate task executions don't occur.
 
@@ -311,7 +304,7 @@ This document specifies the requirements for separating the monolithic Eioku bac
 3. WHEN a Worker_Service processes a job, THE Worker_Service SHALL check if task is already COMPLETED before processing
 4. IF a task is already COMPLETED, THEN THE Worker_Service SHALL skip processing and return success
 
-### Requirement 20: Graceful Shutdown
+### Requirement 19: Graceful Shutdown
 
 **User Story:** As a system operator, I want services to shut down gracefully, so that in-flight jobs are handled properly.
 
@@ -323,24 +316,24 @@ This document specifies the requirements for separating the monolithic Eioku bac
 4. WHEN the API_Service receives shutdown signal, THE API_Service SHALL close database connections gracefully
 5. WHEN the ML_Service receives shutdown signal, THE ML_Service SHALL unload models and close connections
 
-### Requirement 21: ML Service Response Models
+### Requirement 20: ML Service Response Models
 
-**User Story:** As a Worker Service, I want to receive structured responses from the ML Service, so that I can reliably transform and persist results.
+**User Story:** As an ML Service, I want to define structured response models for persisting results, so that artifacts are stored consistently with provenance metadata.
 
 #### Acceptance Criteria
 
-1. THE ML_Service SHALL define Pydantic response models for each inference endpoint
-2. WHEN the ML_Service returns results, THE response models SHALL include run_id, config_hash, input_hash, model_profile, producer, and producer_version
-3. WHEN the ML_Service returns object detection results, THE response model SHALL include list of Detection objects with frame_index, timestamp_ms, label, confidence, and bounding_box
-4. WHEN the ML_Service returns face detection results, THE response model SHALL include list of Detection objects with cluster_id
-5. WHEN the ML_Service returns transcription results, THE response model SHALL include list of Segment objects with start_ms, end_ms, text, confidence, and words
-6. WHEN the ML_Service returns OCR results, THE response model SHALL include list of Detection objects with polygon coordinates
-7. WHEN the ML_Service returns place classification results, THE response model SHALL include list of Classification objects with frame_index, timestamp_ms, and predictions
-8. WHEN the ML_Service returns scene detection results, THE response model SHALL include list of Scene objects with scene_index, start_ms, and end_ms
-9. THE ML_Service response models SHALL be defined in ml-service/src/models/responses.py
-10. THE ML_Service response models SHALL be validated by Pydantic on output
+1. THE ML_Service SHALL define Pydantic models for each artifact type (Detection, Segment, Classification, Scene)
+2. WHEN the ML_Service creates artifacts, THE models SHALL include run_id, config_hash, input_hash, model_profile, producer, and producer_version
+3. WHEN the ML_Service processes object detection, THE model SHALL include list of Detection objects with frame_index, timestamp_ms, label, confidence, and bounding_box
+4. WHEN the ML_Service processes face detection, THE model SHALL include list of Detection objects with cluster_id
+5. WHEN the ML_Service processes transcription, THE model SHALL include list of Segment objects with start_ms, end_ms, text, confidence, and words
+6. WHEN the ML_Service processes OCR, THE model SHALL include list of Detection objects with polygon coordinates
+7. WHEN the ML_Service processes place classification, THE model SHALL include list of Classification objects with frame_index, timestamp_ms, and predictions
+8. WHEN the ML_Service processes scene detection, THE model SHALL include list of Scene objects with scene_index, start_ms, and end_ms
+9. THE ML_Service artifact models SHALL be defined in ml-service/src/models/artifacts.py
+10. THE ML_Service models SHALL be validated by Pydantic before persisting to PostgreSQL
 
-### Requirement 22: Artifact Envelope Transformation
+### Requirement 21: Artifact Envelope Transformation
 
 **User Story:** As a Worker Service, I want to transform ML responses into ArtifactEnvelopes, so that results are persisted in the correct format.
 
@@ -353,7 +346,7 @@ This document specifies the requirements for separating the monolithic Eioku bac
 5. WHEN the Worker_Service persists artifacts, THE Worker_Service SHALL batch insert all ArtifactEnvelopes for a task in a single transaction
 6. THE ArtifactEnvelope transformation logic SHALL be defined in Worker_Service
 
-### Requirement 23: Artifact Payload Schema Validation
+### Requirement 22: Artifact Payload Schema Validation
 
 **User Story:** As an API Service, I want to validate artifact payloads, so that data integrity is maintained in the database.
 

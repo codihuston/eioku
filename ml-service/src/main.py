@@ -44,13 +44,13 @@ async def lifespan(app: FastAPI):
         MODEL_MANAGER = ModelManager(cache_dir=model_cache_dir)
         logger.info(f"Model cache directory: {model_cache_dir}")
 
-        # Set globals for inference and health endpoints
-        inference.set_globals(GPU_SEMAPHORE, MODEL_MANAGER, gpu_available)
-        health.set_globals(MODELS_REGISTRY, MODEL_MANAGER)
-
         # Check GPU availability
         gpu_available = MODEL_MANAGER.detect_gpu()
         require_gpu = os.getenv("REQUIRE_GPU", "false").lower() == "true"
+
+        # Set globals for inference and health endpoints
+        inference.set_globals(GPU_SEMAPHORE, MODEL_MANAGER, gpu_available)
+        health.set_globals(MODELS_REGISTRY, MODEL_MANAGER)
 
         logger.info(f"GPU available: {gpu_available}")
 

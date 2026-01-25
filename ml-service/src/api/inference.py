@@ -119,12 +119,13 @@ async def detect_objects(request: ObjectDetectionRequest) -> ObjectDetectionResp
             model = YOLO(request.model_name)
             model.to(device)
 
-            # Run inference
+            # Run inference with streaming to avoid memory issues
             results = model(
                 request.video_path,
                 conf=request.confidence_threshold,
                 verbose=False,
                 device=device,
+                stream=True,
             )
 
             # Extract detections
@@ -193,12 +194,13 @@ async def detect_faces(request: FaceDetectionRequest) -> FaceDetectionResponse:
             model = YOLO(request.model_name)
             model.to(device)
 
-            # Run inference
+            # Run inference with streaming to avoid memory issues
             results = model(
                 request.video_path,
                 conf=request.confidence_threshold,
                 verbose=False,
                 device=device,
+                stream=True,
             )
 
             # Extract detections
@@ -281,7 +283,7 @@ async def transcribe_video(request: TranscriptionRequest) -> TranscriptionRespon
                     start_ms=int(segment.start * 1000),
                     end_ms=int(segment.end * 1000),
                     text=segment.text,
-                    confidence=segment.confidence,
+                    confidence=None,  # faster_whisper doesn't provide segment confidence
                     words=None,
                 )
                 transcription_segments.append(ts)

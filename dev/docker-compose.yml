@@ -88,8 +88,12 @@ services:
 
   ml-service:
     build:
-      context: .
-      dockerfile: Dockerfile.ml-service
+      context: ..
+      dockerfile: dev/Dockerfile.ml-service
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    ports:
+      - "8001:8001"
     volumes:
       - ../ml-service:/app
       - ../test-videos:/media:ro
@@ -98,10 +102,14 @@ services:
       - PYTHONPATH=/app
       - GPU_CONCURRENCY=2
       - MODEL_CACHE_DIR=/models
+      # Model library cache directories
+      - HF_HOME=/models/huggingface
+      - YOLO_CONFIG_DIR=/models/ultralytics
+      - EASYOCR_HOME=/models/easyocr5
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     working_dir: /app
-    command: bash -c "poetry install --no-interaction --no-ansi && uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload"
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8001 --reload
     deploy:
       resources:
         reservations:

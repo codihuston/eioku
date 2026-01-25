@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "eioku-ml-service"
 version = "0.1.0"
-description = "Eioku ML Service - Stateless ML inference endpoints"
+description = "Eioku ML Service - ML inference job consumer"
 authors = ["Eioku Team <team@eioku.com>"]
 readme = "README.md"
 packages = [{include = "src"}]
@@ -11,14 +11,17 @@ python = "^3.10"
 fastapi = "^0.104.1"
 uvicorn = {extras = ["standard"], version = "^0.24.0"}
 pydantic = "^2.0"
-torch = "^2.0"
-torchvision = "^0.15"
+# ML inference dependencies (same as backend)
 ultralytics = "^8.0.0"
 faster-whisper = "^1.2.1"
 easyocr = "^1.7.0"
 opencv-python = "^4.8.0"
 numpy = "^1.24"
 pillow = "^10.0"
+# Job queue
+arq = "^0.26"
+# Database
+psycopg2-binary = "^2.9.9"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"

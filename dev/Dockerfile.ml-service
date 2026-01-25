@@ -1,19 +1,45 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1.4
+FROM nvidia/cuda:12.6.0-cudnn-runtime-ubuntu22.04
 
-WORKDIR /app
-
-# Install system dependencies
+# Install Python 3.10 and system dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
+    python3.10 \
+    python3.10-dev \
+    python3-pip \
     ffmpeg \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+# Make python3.10 the default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
 
 # Install Poetry
 RUN pip install poetry
 
-# Configure Poetry to not create virtualenv (use system Python)
-RUN poetry config virtualenvs.create false
+# Configure Poetry to create virtualenv in a fixed location
+ENV POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_IN_PROJECT=0 \
+    POETRY_VIRTUALENVS_PATH=/opt/venv \
+    POETRY_CACHE_DIR=/root/.cache/pypoetry
+
+WORKDIR /app
+
+# Copy Poetry files only (for layer caching)
+COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
+
+# Install dependencies with BuildKit cache mount for Poetry cache only
+# The virtualenv is created at /opt/venv which stays in the image
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    poetry install --no-root --only main && \
+    ln -s /opt/venv/*/bin /opt/venv/bin
+
+# Add venv to PATH
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY ml-service/src ./src
 
 # Expose port
 EXPOSE 8001
@@ -21,3 +47,9 @@ EXPOSE 8001
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8001/health')" || exit 1
+
+# Override NVIDIA entrypoint to use our command
+ENTRYPOINT []
+
+# Start the application
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]

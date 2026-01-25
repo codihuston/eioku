@@ -8,10 +8,11 @@ This document describes the architectural design for separating the monolithic E
 
 1. **PostgreSQL as Source of Truth**: All persistent state lives in PostgreSQL; Redis is ephemeral
 2. **Time-Free Reconciliation**: Reconciler uses definitive Redis signals, never time-based thresholds
-3. **Stateless ML Service**: ML Service has no database access, only HTTP endpoints
-4. **Async-First Architecture**: All I/O operations use async/await for efficiency
-5. **Graceful Degradation**: Services can fail independently without cascading failures
-6. **Horizontal Scalability**: All services can scale independently via Docker Compose or Kubernetes
+3. **Shared Queue Pattern**: Both Worker and ML Service consume from same Redis queues (no HTTP calls)
+4. **Result Polling**: Worker polls PostgreSQL for artifact completion instead of blocking on HTTP
+5. **Async-First Architecture**: All I/O operations use async/await for efficiency
+6. **Graceful Degradation**: Services can fail independently without cascading failures
+7. **Horizontal Scalability**: All services can scale independently via Docker Compose or Kubernetes
 
 ## Architecture
 
@@ -38,59 +39,46 @@ This document describes the architectural design for separating the monolithic E
 │                    ▼                 ▼                           │
 │            PostgreSQL         Redis (arq)                        │
 │            Connection         Job Producer                       │
-│            Pool (20)                                             │
+│            Pool (20)          (gpu_jobs, cpu_jobs)              │
 └─────────────────────────────────────────────────────────────────┘
                              │
                     ┌────────┴────────┐
                     ▼                 ▼
         ┌──────────────────┐  ┌──────────────────┐
         │  PostgreSQL      │  │  Redis/Valkey    │
-        │  (Source of      │  │  (Job Queue)     │
+        │  (Source of      │  │  (Job Queues)    │
         │   Truth)         │  │  (Ephemeral)     │
+        │                  │  │  - gpu_jobs      │
+        │  - tasks         │  │  - cpu_jobs      │
+        │  - artifacts     │  │  - ml_jobs       │
         └──────────────────┘  └──────────────────┘
                     ▲                 │
-                    │                 ▼
-        ┌──────────────────────────────────────┐
-        │    Worker Service (No HTTP)          │
-        │  ┌──────────────────────────────────┐│
-        │  │ arq Consumer                     ││
-        │  │ - Job consumption from Redis     ││
-        │  │ - Task handler dispatch          ││
-        │  │ - ML Service HTTP calls          ││
-        │  │ - Artifact persistence           ││
-        │  │ - Reconciliation (every 5 min)   ││
-        │  └──────────────────────────────────┘│
-        │                                      │
-        │  Connection Pool (10)                │
-        │  httpx AsyncClient                   │
-        └──────────────────────────────────────┘
-                    │
-                    ▼
-        ┌──────────────────────────────────────┐
-        │    ML Service (Port 8001)            │
-        │  ┌──────────────────────────────────┐│
-        │  │ FastAPI Server                   ││
-        │  │ - /infer/objects                 ││
-        │  │ - /infer/faces                   ││
-        │  │ - /infer/transcribe              ││
-        │  │ - /infer/ocr                     ││
-        │  │ - /infer/places                  ││
-        │  │ - /infer/scenes                  ││
-        │  │ - /health                        ││
-        │  └──────────────────────────────────┘│
-        │                                      │
-        │  GPU Semaphore (concurrency=2)       │
-        │  Model Cache (lazy-loaded)           │
-        └──────────────────────────────────────┘
+                    │                 ├─────────────────┐
+                    │                 ▼                 ▼
+        ┌──────────────────────────────────────┐  ┌──────────────────────────────────────┐
+        │    Worker Service (No HTTP)          │  │    ML Service (No HTTP)              │
+        │  ┌──────────────────────────────────┐│  │  ┌──────────────────────────────────┐│
+        │  │ arq Consumer                     ││  │  │ arq Consumer                     ││
+        │  │ - Consume from gpu_jobs/cpu_jobs││  │  │ - Consume from ml_jobs queue     ││
+        │  │ - Enqueue to ml_jobs queue       ││  │  │ - Execute ML inference           ││
+        │  │ - Poll PostgreSQL for results    ││  │  │ - Create ArtifactEnvelopes       ││
+        │  │ - Update task status             ││  │  │ - Batch insert to PostgreSQL     ││
+        │  │ - Reconciliation (every 5 min)   ││  │  │ - Acknowledge job in Redis       ││
+        │  └──────────────────────────────────┘│  │  └──────────────────────────────────┘│
+        │                                      │  │                                      │
+        │  Connection Pool (10)                │  │  Connection Pool (10)                │
+        │  Polling with exponential backoff    │  │  GPU Semaphore (concurrency=2)       │
+        └──────────────────────────────────────┘  │  Model Cache (lazy-loaded)           │
+                                                   └──────────────────────────────────────┘
 ```
 
 ### Service Responsibilities
 
 | Service | Responsibilities | Scaling | Deployment |
 |---------|------------------|---------|------------|
-| **API Service** | REST endpoints, task orchestration, job enqueueing, artifact queries | Horizontal (stateless) | Separate container |
-| **Worker Service** | Job consumption, ML dispatch, artifact persistence, reconciliation | Horizontal (stateless) | Separate container |
-| **ML Service** | Inference endpoints, model management, GPU scheduling | Horizontal (GPU-aware) | Separate container |
+| **API Service** | REST endpoints, task orchestration, job enqueueing to gpu_jobs/cpu_jobs, artifact queries | Horizontal (stateless) | Separate container |
+| **Worker Service** | Consume from gpu_jobs/cpu_jobs, enqueue to ml_jobs, poll PostgreSQL for results, reconciliation | Horizontal (stateless) | Separate container |
+| **ML Service** | Consume from ml_jobs, execute ML inference, persist artifacts to PostgreSQL, GPU management | Horizontal (GPU-aware) | Separate container |
 
 ### Data Flow Diagrams
 
@@ -141,44 +129,64 @@ Redis: XADD ml_jobs {task_id, task_type, video_id, video_path}
 Response: {task_id, job_id, status}
 ```
 
-#### Job Execution Flow
+#### Job Execution Flow (Shared Queue Pattern)
 
 ```
-Worker Service: arq Consumer
+Worker Service: arq Consumer (gpu_jobs or cpu_jobs)
+    │
+    ├─ XREADGROUP from gpu_jobs or cpu_jobs
+    │
+    ▼
+Redis: Job payload {task_id, task_type, video_id, video_path, config}
+    │
+    ├─ Check task status (pre-flight)
+    ├─ Update task status to RUNNING in PostgreSQL
+    │
+    ▼
+PostgreSQL: UPDATE tasks SET status=RUNNING, started_at=NOW()
+    │
+    ▼
+Worker Service: Enqueue to ml_jobs queue
+    │
+    ├─ XADD ml_jobs {task_id, task_type, video_id, video_path, config}
+    │
+    ▼
+Redis: ml_jobs queue now has job
+    │
+    ├─ Worker Service begins polling PostgreSQL for artifacts
+    ├─ Poll with exponential backoff (1s, 2s, 4s, 8s, etc.)
+    │
+    ▼
+ML Service: arq Consumer (ml_jobs)
     │
     ├─ XREADGROUP from ml_jobs
     │
     ▼
 Redis: Job payload
     │
-    ├─ Check task status (pre-flight)
-    ├─ Update task status to RUNNING
-    │
-    ▼
-PostgreSQL: UPDATE tasks SET status=RUNNING
-    │
-    ▼
-Worker Service: Dispatch to ML Service
-    │
-    ├─ POST /infer/{type} with video_path, config
-    │
-    ▼
-ML Service: Inference
-    │
-    ├─ Load model (lazy)
+    ├─ Load model (lazy, with GPU semaphore)
     ├─ Process video
-    ├─ Return detections + provenance
+    ├─ Create ArtifactEnvelopes with provenance
     │
     ▼
-Worker Service: Transform & Persist
+ML Service: Batch insert artifacts to PostgreSQL
     │
-    ├─ Create ArtifactEnvelopes
-    ├─ Batch insert to PostgreSQL
-    ├─ Update task status to COMPLETED
+    ├─ INSERT INTO artifacts (task_id, artifact_type, payload_json, config_hash, input_hash, ...)
     ├─ XACK job in Redis
     │
     ▼
-PostgreSQL: Artifacts inserted, projections updated
+PostgreSQL: Artifacts inserted, projections updated via triggers
+    │
+    ▼
+Worker Service: Polling detects artifacts
+    │
+    ├─ SELECT COUNT(*) FROM artifacts WHERE task_id = ?
+    ├─ Verify all expected artifacts present
+    ├─ Update task status to COMPLETED
+    ├─ XACK job in Redis (gpu_jobs or cpu_jobs)
+    │
+    ▼
+PostgreSQL: Task marked COMPLETED, started_at and completed_at recorded
 ```
 
 #### Reconciliation Flow
