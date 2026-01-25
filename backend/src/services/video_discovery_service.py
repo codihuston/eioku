@@ -215,7 +215,8 @@ class VideoDiscoveryService:
             try:
                 task_repo.save(task)
                 logger.info(
-                    f"Created task record {task_id} ({task_type}) for video {video.video_id}"
+                    f"Created task record {task_id} ({task_type}) for "
+                    f"video {video.video_id}"
                 )
             except Exception as e:
                 logger.error(

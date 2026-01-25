@@ -1,7 +1,6 @@
 """Task processing and status API endpoints."""
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -26,21 +25,15 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 class EnqueueTaskResponse(BaseModel):
     """Response model for task enqueueing endpoint."""
 
-    task_id: str = Field(
-        ..., description="The unique identifier of the task"
-    )
-    job_id: str = Field(
-        ..., description="The job ID in Redis (format: ml_{task_id})"
-    )
+    task_id: str = Field(..., description="The unique identifier of the task")
+    job_id: str = Field(..., description="The job ID in Redis (format: ml_{task_id})")
     status: str = Field(
         ..., description="Status of the enqueueing operation", example="enqueued"
     )
     task_type: str = Field(
         ..., description="Type of ML task", example="object_detection"
     )
-    video_id: str = Field(
-        ..., description="The video ID associated with this task"
-    )
+    video_id: str = Field(..., description="The video ID associated with this task")
 
     class Config:
         """Pydantic config."""
@@ -69,6 +62,82 @@ class ErrorResponse(BaseModel):
         }
 
 
+class CancelTaskResponse(BaseModel):
+    """Response model for task cancellation endpoint."""
+
+    task_id: str = Field(..., description="The unique identifier of the task")
+    status: str = Field(
+        ..., description="Status of the cancellation operation", example="cancelled"
+    )
+    message: str = Field(..., description="Cancellation message")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "cancelled",
+                "message": (
+                    "Task cancelled successfully. "
+                    "Note: If ML inference is already running, it will complete."
+                ),
+            }
+        }
+
+
+class RetryTaskResponse(BaseModel):
+    """Response model for task retry endpoint."""
+
+    task_id: str = Field(..., description="The unique identifier of the task")
+    job_id: str = Field(..., description="The new job ID in Redis")
+    status: str = Field(
+        ..., description="Status of the retry operation", example="pending"
+    )
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                "job_id": "ml_550e8400-e29b-41d4-a716-446655440000",
+                "status": "pending",
+            }
+        }
+
+
+class TaskListResponse(BaseModel):
+    """Response model for task list endpoint."""
+
+    tasks: list[dict] = Field(..., description="List of tasks")
+    total: int = Field(..., description="Total number of tasks matching filters")
+    limit: int = Field(..., description="Pagination limit")
+    offset: int = Field(..., description="Pagination offset")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "tasks": [
+                    {
+                        "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "task_type": "object_detection",
+                        "status": "completed",
+                        "video_id": "550e8400-e29b-41d4-a716-446655440001",
+                        "created_at": "2024-01-25T10:00:00",
+                        "started_at": "2024-01-25T10:00:05",
+                        "completed_at": "2024-01-25T10:05:00",
+                    }
+                ],
+                "total": 42,
+                "limit": 10,
+                "offset": 0,
+            }
+        }
+
+
 # ============================================================================
 # Endpoints
 # ============================================================================
@@ -90,25 +159,23 @@ class ErrorResponse(BaseModel):
     "The task must exist and be in PENDING status to be enqueued successfully.",
 )
 async def enqueue_task(
-    task_id: str = Field(
-        ..., description="The unique identifier of the task to enqueue"
-    ),
+    task_id: str,
     db: Session = Depends(get_db),
 ) -> EnqueueTaskResponse:
     """Manually enqueue a task for processing.
-    
+
     This endpoint allows manual enqueueing of a task that is in PENDING status.
     The task must exist and be in PENDING status to be enqueued.
-    
+
     **Requirements**: 1.3
-    
+
     Args:
         task_id: The task ID to enqueue
         db: Database session
-        
+
     Returns:
         EnqueueTaskResponse with job_id, task_id, and status
-        
+
     Raises:
         HTTPException 404: If task or video not found
         HTTPException 400: If task not in PENDING status
@@ -118,43 +185,41 @@ async def enqueue_task(
         # Get task from database
         task_repo = SQLAlchemyTaskRepository(db)
         task = task_repo.find_by_id(task_id)
-        
+
         if not task:
             logger.warning(f"Task not found: {task_id}")
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-        
+
         # Verify task is in PENDING status
         if task.status != "pending":
-            logger.warning(
-                f"Cannot enqueue task {task_id} in status {task.status}"
-            )
+            logger.warning(f"Cannot enqueue task {task_id} in status {task.status}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Cannot enqueue task in status {task.status}. "
                 f"Task must be in PENDING status.",
             )
-        
+
         # Get video details
         video_repo = SqlVideoRepository(db)
         video = video_repo.find_by_id(task.video_id)
-        
+
         if not video:
             logger.error(f"Video not found for task {task_id}: {task.video_id}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Video {task.video_id} not found",
             )
-        
+
         # Get default config for task type
         from ..services.video_discovery_service import VideoDiscoveryService
-        
+
         discovery_service = VideoDiscoveryService(None, video_repo)
         config = discovery_service._get_default_config(task.task_type)
-        
+
         # Initialize JobProducer and enqueue task
         job_producer = JobProducer()
         await job_producer.initialize()
-        
+
         try:
             job_id = await job_producer.enqueue_task(
                 task_id=task_id,
@@ -163,12 +228,12 @@ async def enqueue_task(
                 video_path=video.file_path,
                 config=config,
             )
-            
+
             logger.info(
                 f"Successfully enqueued task {task_id} ({task.task_type}) "
                 f"with job_id {job_id}"
             )
-            
+
             return EnqueueTaskResponse(
                 task_id=task_id,
                 job_id=job_id,
@@ -176,10 +241,10 @@ async def enqueue_task(
                 task_type=task.task_type,
                 video_id=str(task.video_id),
             )
-            
+
         finally:
             await job_producer.close()
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -187,6 +252,409 @@ async def enqueue_task(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to enqueue task: {str(e)}",
+        )
+
+
+@router.post(
+    "/{task_id}/cancel",
+    response_model=CancelTaskResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        400: {
+            "model": ErrorResponse,
+            "description": "Task cannot be cancelled in current status",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+    summary="Cancel a task",
+    description="Cancel a task that is in PENDING or RUNNING status. "
+    "**LIMITATION**: If ML inference is already running in the ML Service, "
+    "it will continue to completion and persist results. Cancellation is best-effort.",
+)
+async def cancel_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+) -> CancelTaskResponse:
+    """Cancel a task that is in PENDING or RUNNING status.
+
+    This endpoint marks a task as CANCELLED and attempts to abort the job in Redis.
+
+    **IMPORTANT LIMITATION**: If the ML Service has already started processing the
+    task, the inference will continue to completion and results will be persisted to
+    PostgreSQL. This is because:
+    1. ML inference operations cannot be safely interrupted mid-execution
+    2. The ML Service worker doesn't have a cancellation mechanism
+    3. Aborting the job in Redis only prevents re-queuing, not execution
+
+    To implement hard cancellation, the ML Service would need to:
+    - Check a cancellation flag in Redis periodically during inference
+    - Gracefully stop processing if cancelled
+    - Skip artifact persistence if cancelled
+
+    **Requirements**: 10.1, 10.2, 10.3, 10.4
+
+    Args:
+        task_id: The task ID to cancel
+        db: Database session
+
+    Returns:
+        CancelTaskResponse with task_id, status, and message
+
+    Raises:
+        HTTPException 404: If task not found
+        HTTPException 400: If task cannot be cancelled in current status
+        HTTPException 500: If cancellation fails
+    """
+    try:
+        # Get task from database
+        task_repo = SQLAlchemyTaskRepository(db)
+        task = task_repo.find_by_id(task_id)
+
+        if not task:
+            logger.warning(f"Task not found: {task_id}")
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        # Verify task can be cancelled (PENDING or RUNNING)
+        if task.status not in ("pending", "running"):
+            logger.warning(f"Cannot cancel task {task_id} in status {task.status}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel task in status {task.status}. "
+                f"Task must be in PENDING or RUNNING status.",
+            )
+
+        # Mark task as CANCELLED in PostgreSQL
+        task.status = "cancelled"
+        task_repo.update(task)
+
+        logger.info(f"Task {task_id} marked as CANCELLED in PostgreSQL")
+
+        # Attempt to abort job in Redis (best-effort)
+        try:
+            from arq import create_pool
+
+            from ..config.redis_config import get_redis_settings
+
+            redis_settings = get_redis_settings()
+            pool = await create_pool(redis_settings)
+
+            try:
+                job_id = f"ml_{task_id}"
+                job = await pool.job(job_id)
+
+                if job:
+                    await job.abort()
+                    logger.info(f"Job {job_id} aborted in Redis")
+                else:
+                    logger.debug(
+                        f"Job {job_id} not found in Redis (may have completed)"
+                    )
+
+            finally:
+                await pool.close()
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to abort job in Redis for task {task_id}: {e}. "
+                f"Task is still marked as CANCELLED in PostgreSQL."
+            )
+
+        return CancelTaskResponse(
+            task_id=task_id,
+            status="cancelled",
+            message="Task cancelled successfully. "
+            "Note: If ML inference is already running, it will complete.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cancel task {task_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cancel task: {str(e)}",
+        )
+
+
+@router.post(
+    "/{task_id}/retry",
+    response_model=RetryTaskResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Task not found"},
+        400: {
+            "model": ErrorResponse,
+            "description": "Task cannot be retried in current status",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+    summary="Retry a failed or cancelled task",
+    description="Reset a task to PENDING status and re-enqueue it for processing. "
+    "The task must be in FAILED or CANCELLED status.",
+)
+async def retry_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+) -> RetryTaskResponse:
+    """Retry a failed or cancelled task.
+
+    This endpoint resets a task to PENDING status and re-enqueues it for processing.
+
+    **Requirements**: 10.1
+
+    Args:
+        task_id: The task ID to retry
+        db: Database session
+
+    Returns:
+        RetryTaskResponse with task_id, job_id, and status
+
+    Raises:
+        HTTPException 404: If task not found
+        HTTPException 400: If task cannot be retried in current status
+        HTTPException 500: If retry fails
+    """
+    try:
+        # Get task from database
+        task_repo = SQLAlchemyTaskRepository(db)
+        task = task_repo.find_by_id(task_id)
+
+        if not task:
+            logger.warning(f"Task not found: {task_id}")
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+        # Verify task is in FAILED or CANCELLED status
+        if task.status not in ("failed", "cancelled"):
+            logger.warning(f"Cannot retry task {task_id} in status {task.status}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot retry task in status {task.status}. "
+                f"Task must be in FAILED or CANCELLED status.",
+            )
+
+        # Get video details
+        video_repo = SqlVideoRepository(db)
+        video = video_repo.find_by_id(task.video_id)
+
+        if not video:
+            logger.error(f"Video not found for task {task_id}: {task.video_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Video {task.video_id} not found",
+            )
+
+        # Get default config for task type
+        from ..services.video_discovery_service import VideoDiscoveryService
+
+        discovery_service = VideoDiscoveryService(None, video_repo)
+        config = discovery_service._get_default_config(task.task_type)
+
+        # Reset task to PENDING
+        task.status = "pending"
+        task.started_at = None
+        task.completed_at = None
+        task.error = None
+        task_repo.update(task)
+
+        logger.info(f"Task {task_id} reset to PENDING status")
+
+        # Re-enqueue task
+        job_producer = JobProducer()
+        await job_producer.initialize()
+
+        try:
+            job_id = await job_producer.enqueue_task(
+                task_id=task_id,
+                task_type=task.task_type,
+                video_id=str(task.video_id),
+                video_path=video.file_path,
+                config=config,
+            )
+
+            logger.info(
+                f"Successfully retried task {task_id} ({task.task_type}) "
+                f"with job_id {job_id}"
+            )
+
+            return RetryTaskResponse(
+                task_id=task_id,
+                job_id=job_id,
+                status="pending",
+            )
+
+        finally:
+            await job_producer.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to retry task {task_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retry task: {str(e)}",
+        )
+
+
+@router.get(
+    "",
+    response_model=TaskListResponse,
+    responses={
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+    summary="List tasks with filtering and sorting",
+    description="Get a paginated list of tasks with optional filtering by status, "
+    "task_type, or video_id, and sorting by created_at, started_at, or running_time.",
+)
+async def list_tasks(
+    status: str | None = None,
+    task_type: str | None = None,
+    video_id: str | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    limit: int = 10,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+) -> TaskListResponse:
+    """List tasks with filtering and sorting.
+
+    This endpoint returns a paginated list of tasks with optional filtering
+    and sorting capabilities.
+
+    **Requirements**: 10.7, 10.8
+
+    Args:
+        status: Filter by task status (pending, running, completed, failed, cancelled)
+        task_type: Filter by task type (object_detection, face_detection, etc.)
+        video_id: Filter by video ID
+        sort_by: Sort field (created_at, started_at, running_time)
+        sort_order: Sort order (asc, desc)
+        limit: Number of tasks to return (default: 10, max: 100)
+        offset: Pagination offset (default: 0)
+        db: Database session
+
+    Returns:
+        TaskListResponse with tasks list and pagination info
+
+    Raises:
+        HTTPException 400: If invalid parameters provided
+        HTTPException 500: If query fails
+    """
+    try:
+        # Validate parameters
+        valid_statuses = {"pending", "running", "completed", "failed", "cancelled"}
+        if status and status not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
+            )
+
+        valid_sort_fields = {"created_at", "started_at", "running_time"}
+        if sort_by not in valid_sort_fields:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Invalid sort_by. Must be one of: "
+                    f"{', '.join(valid_sort_fields)}"
+                ),
+            )
+
+        if sort_order not in ("asc", "desc"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid sort_order. Must be 'asc' or 'desc'",
+            )
+
+        # Limit pagination
+        limit = min(limit, 100)
+        if limit < 1:
+            limit = 10
+        if offset < 0:
+            offset = 0
+
+        # Get task repository
+        task_repo = SQLAlchemyTaskRepository(db)
+
+        # Build query filters
+        filters = {}
+        if status:
+            filters["status"] = status
+        if task_type:
+            filters["task_type"] = task_type
+        if video_id:
+            filters["video_id"] = video_id
+
+        # Get all tasks matching filters (we'll sort in Python for simplicity)
+        all_tasks = []
+
+        if status:
+            all_tasks = task_repo.find_by_status(status)
+        else:
+            # Get all tasks - this is a limitation of the current repository
+            # In production, you'd want a more efficient query
+            all_tasks = task_repo.find_all() if hasattr(task_repo, "find_all") else []
+
+        # Apply additional filters
+        if task_type:
+            all_tasks = [t for t in all_tasks if t.task_type == task_type]
+        if video_id:
+            all_tasks = [t for t in all_tasks if str(t.video_id) == video_id]
+
+        # Sort tasks
+        def get_sort_key(task):
+            if sort_by == "created_at":
+                return task.created_at or ""
+            elif sort_by == "started_at":
+                return task.started_at or ""
+            elif sort_by == "running_time":
+                if hasattr(task, "started_at") and hasattr(task, "completed_at"):
+                    if task.started_at and task.completed_at:
+                        return (task.completed_at - task.started_at).total_seconds()
+                return 0
+            return ""
+
+        all_tasks.sort(key=get_sort_key, reverse=(sort_order == "desc"))
+
+        # Apply pagination
+        total = len(all_tasks)
+        paginated_tasks = all_tasks[offset : offset + limit]
+
+        # Format response
+        tasks_data = [
+            {
+                "task_id": str(task.task_id),
+                "task_type": task.task_type,
+                "status": task.status,
+                "video_id": str(task.video_id),
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "started_at": task.started_at.isoformat()
+                if hasattr(task, "started_at") and task.started_at
+                else None,
+                "completed_at": task.completed_at.isoformat()
+                if task.completed_at
+                else None,
+                "error": getattr(task, "error", None),
+            }
+            for task in paginated_tasks
+        ]
+
+        logger.info(
+            f"Listed {len(paginated_tasks)} tasks (total: {total}, "
+            f"offset: {offset}, limit: {limit})"
+        )
+
+        return TaskListResponse(
+            tasks=tasks_data,
+            total=total,
+            limit=limit,
+            offset=offset,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to list tasks: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list tasks: {str(e)}",
         )
 
 

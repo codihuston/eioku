@@ -67,7 +67,6 @@ async def lifespan(app: FastAPI):
         logger.info("5️⃣ Importing services...")
         from src.repositories.task_repository import SQLAlchemyTaskRepository
         from src.repositories.video_repository import SqlVideoRepository
-        from src.services.task_orchestration import TaskType
         from src.services.task_orchestrator import TaskOrchestrator
         from src.services.worker_pool_manager import (
             WorkerPoolManager,
@@ -87,7 +86,9 @@ async def lifespan(app: FastAPI):
         job_producer = JobProducer()
         await job_producer.initialize()
 
-        discovery_service = VideoDiscoveryService(path_manager, video_repo, job_producer)
+        discovery_service = VideoDiscoveryService(
+            path_manager, video_repo, job_producer
+        )
         discovered_videos = discovery_service.discover_videos()
         logger.info(f"✅ Discovered {len(discovered_videos)} videos")
 
@@ -99,7 +100,8 @@ async def lifespan(app: FastAPI):
                     await discovery_service.discover_and_queue_tasks(video.file_path)
                     tasks_created += 6  # 6 tasks per video
                     logger.info(
-                        f"✅ Auto-created and queued 6 ML tasks for video {video.video_id}"
+                        f"✅ Auto-created and queued 6 ML tasks for "
+                        f"video {video.video_id}"
                     )
                 except Exception as e:
                     logger.error(
