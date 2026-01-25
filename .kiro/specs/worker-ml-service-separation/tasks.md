@@ -177,7 +177,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 10. Implement task handler for arq (Worker Service)
 
-- [ ] 10.1 Create process_ml_task() handler in backend/src/workers/
+- [x] 10.1 Create process_ml_task() handler in backend/src/workers/
   - Pre-flight check: verify task status is not COMPLETED/CANCELLED
   - Update task status to RUNNING in PostgreSQL
   - Enqueue job to ml_jobs queue (shared queue pattern)
@@ -186,7 +186,7 @@ This implementation plan breaks down the service separation into discrete, testa
   - Handle other exceptions and mark task as FAILED
   - _Requirements: 2.6, 2.7, 2.8, 5.2, 5.3, 14.1, 20.1_
 
-- [ ] 10.2 Create artifact polling logic
+- [x] 10.2 Create artifact polling logic
   - Implement poll_for_artifacts() with exponential backoff
   - Check artifacts table for task_id
   - Verify all expected artifacts are present
