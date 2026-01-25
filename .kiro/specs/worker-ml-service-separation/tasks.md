@@ -162,14 +162,14 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 9. Create arq worker configuration
 
-- [ ] 9.1 Create arq worker configuration in backend/src/workers/
+- [x] 9.1 Create arq worker configuration in backend/src/workers/
   - Read GPU_MODE environment variable (gpu, cpu, auto)
   - Implement get_queue_names() to select appropriate queue
   - Auto-detect GPU if GPU_MODE=auto
   - Configure max_jobs, job_timeout, max_tries
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ]* 9.2 Write unit test for worker configuration
+- [x]* 9.2 Write unit test for worker configuration
   - Test GPU mode selects gpu_jobs queue
   - Test CPU mode selects cpu_jobs queue
   - Test auto mode detects GPU correctly
