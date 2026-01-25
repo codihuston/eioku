@@ -245,7 +245,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 13. Checkpoint - Job Queue Complete
 
-- [ ] 13.1 Ensure all job queue tests pass
+- [x] 13.1 Ensure all job queue tests pass
   - Run pytest on backend/tests/workers/
   - Verify job consumption from Redis
   - Verify artifact persistence
