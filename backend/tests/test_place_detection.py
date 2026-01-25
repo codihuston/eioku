@@ -188,11 +188,11 @@ class TestPlaceDetectionTaskHandler:
 
         # Parse and validate payload
         payload = PlaceClassificationV1.model_validate_json(artifact.payload_json)
-        assert payload.label == "office"
-        assert payload.confidence == 0.87
-        assert len(payload.alternative_labels) == 2
-        assert payload.alternative_labels[0].label == "conference_room"
-        assert payload.alternative_labels[0].confidence == 0.65
+        assert len(payload.predictions) == 3
+        assert payload.predictions[0].label == "office"
+        assert payload.predictions[0].confidence == 0.87
+        assert payload.predictions[1].label == "conference_room"
+        assert payload.predictions[1].confidence == 0.65
         assert payload.frame_number == 0
 
     def test_process_place_detection_task_failure(

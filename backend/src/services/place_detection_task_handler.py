@@ -10,8 +10,8 @@ from ..domain.artifacts import ArtifactEnvelope
 from ..domain.models import Task, Video
 from ..domain.schema_registry import SchemaRegistry
 from ..domain.schemas.place_classification_v1 import (
-    AlternativeLabel,
     PlaceClassificationV1,
+    PlacePrediction,
 )
 from ..repositories.interfaces import ArtifactRepository
 from .place_detection_service import PlaceDetectionService
@@ -129,21 +129,17 @@ class PlaceDetectionTaskHandler:
                 if not classifications:
                     continue
 
-                # Primary classification is the first (highest confidence)
-                primary = classifications[0]
-
-                # Alternative labels are the rest
-                alternative_labels = [
-                    AlternativeLabel(label=c["label"], confidence=c["confidence"])
-                    for c in classifications[1:]
+                # Create predictions list from all classifications
+                predictions = [
+                    PlacePrediction(label=c["label"], confidence=c["confidence"])
+                    for c in classifications
                 ]
 
                 # Create payload using Pydantic schema
                 payload = PlaceClassificationV1(
-                    label=primary["label"],
-                    confidence=primary["confidence"],
-                    alternative_labels=alternative_labels,
+                    predictions=predictions,
                     frame_number=frame_number,
+                    top_k=len(predictions),
                 )
 
                 # Calculate time span for this classification

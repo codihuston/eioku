@@ -5,7 +5,7 @@ from src.domain.schema_registry import SchemaRegistry
 from src.domain.schemas import (
     FaceDetectionV1,
     ObjectDetectionV1,
-    OcrTextV1,
+    OCRDetectionV1,
     PlaceClassificationV1,
     SceneV1,
     TranscriptSegmentV1,
@@ -29,7 +29,7 @@ class TestSchemaInitialization:
         assert SchemaRegistry.is_registered("object.detection", 1) is True
         assert SchemaRegistry.is_registered("face.detection", 1) is True
         assert SchemaRegistry.is_registered("place.classification", 1) is True
-        assert SchemaRegistry.is_registered("ocr.text", 1) is True
+        assert SchemaRegistry.is_registered("ocr.detection", 1) is True
 
     def test_registered_schemas_are_correct_types(self):
         """Test that registered schemas are the correct types."""
@@ -43,7 +43,7 @@ class TestSchemaInitialization:
             SchemaRegistry.get_schema("place.classification", 1)
             == PlaceClassificationV1
         )
-        assert SchemaRegistry.get_schema("ocr.text", 1) == OcrTextV1
+        assert SchemaRegistry.get_schema("ocr.detection", 1) == OCRDetectionV1
 
     def test_schemas_can_validate_payloads(self):
         """Test that registered schemas can validate payloads."""
@@ -52,9 +52,9 @@ class TestSchemaInitialization:
         # Test transcript.segment
         transcript_payload = {
             "text": "Hello world",
-            "speaker": "Speaker 1",
+            "start_ms": 1000,
+            "end_ms": 3000,
             "confidence": 0.95,
-            "language": "en",
         }
         validated = SchemaRegistry.validate("transcript.segment", 1, transcript_payload)
         assert validated.text == "Hello world"

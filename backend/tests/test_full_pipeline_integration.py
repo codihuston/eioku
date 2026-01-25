@@ -33,10 +33,10 @@ from src.domain.schemas.object_detection_v1 import (
 from src.domain.schemas.object_detection_v1 import (
     ObjectDetectionV1,
 )
-from src.domain.schemas.ocr_text_v1 import OcrTextV1, PolygonPoint
+from src.domain.schemas.ocr_detection_v1 import OCRDetectionV1, Point
 from src.domain.schemas.place_classification_v1 import (
-    AlternativeLabel,
     PlaceClassificationV1,
+    PlacePrediction,
 )
 from src.domain.schemas.scene_v1 import SceneV1
 from src.domain.schemas.transcript_segment_v1 import TranscriptSegmentV1
@@ -346,16 +346,18 @@ class TestFullPipelineIntegration:
         ]
 
         for label, confidence, alternatives, timestamp_ms in places:
-            alt_labels = [
-                AlternativeLabel(label=alt[0], confidence=alt[1])
-                for alt in alternatives
+            predictions = [
+                PlacePrediction(label=label, confidence=confidence),
+                *[
+                    PlacePrediction(label=alt[0], confidence=alt[1])
+                    for alt in alternatives
+                ],
             ]
 
             payload = PlaceClassificationV1(
-                label=label,
-                confidence=confidence,
-                alternative_labels=alt_labels,
+                predictions=predictions,
                 frame_number=timestamp_ms // 33,
+                top_k=len(predictions),
             )
 
             artifact = ArtifactEnvelope(
@@ -385,10 +387,9 @@ class TestFullPipelineIntegration:
 
         # Verify payload structure
         payload = json.loads(artifacts[0].payload_json)
-        assert "label" in payload
-        assert "confidence" in payload
-        assert "alternative_labels" in payload
-        assert len(payload["alternative_labels"]) == 2
+        assert "predictions" in payload
+        assert len(payload["predictions"]) >= 1
+        assert "frame_number" in payload
 
     def test_ocr_artifacts_and_projection(self, session, artifact_repo, test_video):
         """Test OCR artifact creation."""
@@ -403,16 +404,16 @@ class TestFullPipelineIntegration:
 
         for text, confidence, timestamp_ms in ocr_texts:
             polygon = [
-                PolygonPoint(x=100, y=100),
-                PolygonPoint(x=200, y=100),
-                PolygonPoint(x=200, y=150),
-                PolygonPoint(x=100, y=150),
+                Point(x=100, y=100),
+                Point(x=200, y=100),
+                Point(x=200, y=150),
+                Point(x=100, y=150),
             ]
 
-            payload = OcrTextV1(
+            payload = OCRDetectionV1(
                 text=text,
                 confidence=confidence,
-                bounding_box=polygon,
+                polygon=polygon,
                 language="en",
                 frame_number=timestamp_ms // 33,
             )
@@ -420,7 +421,7 @@ class TestFullPipelineIntegration:
             artifact = ArtifactEnvelope(
                 artifact_id=str(uuid.uuid4()),
                 asset_id=test_video.video_id,
-                artifact_type="ocr.text",
+                artifact_type="ocr.detection",
                 schema_version=1,
                 span_start_ms=timestamp_ms,
                 span_end_ms=timestamp_ms + 33,
@@ -438,7 +439,7 @@ class TestFullPipelineIntegration:
 
         # Verify artifacts created
         artifacts = artifact_repo.get_by_asset(
-            asset_id=test_video.video_id, artifact_type="ocr.text"
+            asset_id=test_video.video_id, artifact_type="ocr.detection"
         )
         assert len(artifacts) == 3
 
@@ -553,7 +554,12 @@ class TestFullPipelineIntegration:
 
         # Create one artifact of each type
         artifact_types = [
-            ("transcript.segment", TranscriptSegmentV1(text="test", confidence=0.9)),
+            (
+                "transcript.segment",
+                TranscriptSegmentV1(
+                    text="test", start_ms=0, end_ms=1000, confidence=0.9
+                ),
+            ),
             (
                 "scene",
                 SceneV1(scene_index=0, method="content", score=0.8, frame_number=0),
@@ -579,22 +585,21 @@ class TestFullPipelineIntegration:
             (
                 "place.classification",
                 PlaceClassificationV1(
-                    label="office",
-                    confidence=0.9,
-                    alternative_labels=[],
+                    predictions=[PlacePrediction(label="office", confidence=0.9)],
                     frame_number=0,
+                    top_k=1,
                 ),
             ),
             (
-                "ocr.text",
-                OcrTextV1(
+                "ocr.detection",
+                OCRDetectionV1(
                     text="test",
                     confidence=0.9,
-                    bounding_box=[
-                        PolygonPoint(x=0, y=0),
-                        PolygonPoint(x=100, y=0),
-                        PolygonPoint(x=100, y=50),
-                        PolygonPoint(x=0, y=50),
+                    polygon=[
+                        Point(x=0, y=0),
+                        Point(x=100, y=0),
+                        Point(x=100, y=50),
+                        Point(x=0, y=50),
                     ],
                     language="en",
                     frame_number=0,
