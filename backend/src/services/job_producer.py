@@ -3,7 +3,8 @@
 import logging
 
 from arq import create_pool
-from arq.connections import RedisSettings
+
+from ..config.redis_config import get_redis_url
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +33,20 @@ class JobProducer:
     # All supported tasks
     SUPPORTED_TASKS = GPU_REQUIRED_TASKS | CPU_CAPABLE_TASKS
 
-    def __init__(self, redis_url: str = "redis://localhost:6379"):
+    def __init__(self, redis_url: str | None = None):
         """Initialize JobProducer with Redis connection.
 
         Args:
-            redis_url: Redis connection URL (default: localhost:6379)
+            redis_url: Redis connection URL (default: from redis_config.py)
         """
-        self.redis_url = redis_url
+        self.redis_url = redis_url or get_redis_url()
         self.pool = None
 
     async def initialize(self) -> None:
         """Initialize Redis connection pool."""
-        redis_settings = RedisSettings.from_dsn(self.redis_url)
+        from ..config.redis_config import get_redis_settings
+
+        redis_settings = get_redis_settings()
         self.pool = await create_pool(redis_settings)
         logger.info(f"JobProducer initialized with Redis: {self.redis_url}")
 

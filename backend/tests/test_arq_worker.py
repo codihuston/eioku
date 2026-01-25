@@ -56,11 +56,11 @@ class TestWorkerSettings:
         assert settings.allow_abort_jobs is True
 
     def test_worker_settings_redis_settings_default_host(self):
-        """Test WorkerSettings uses default Redis host."""
+        """Test WorkerSettings uses default Redis host from config."""
         from src.workers.arq_worker import WorkerSettings
 
         settings = WorkerSettings()
-        assert settings.redis_settings.host == "localhost"
+        assert settings.redis_settings.host == "valkey"
 
     def test_worker_settings_redis_settings_default_port(self):
         """Test WorkerSettings uses default Redis port."""

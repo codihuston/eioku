@@ -372,9 +372,9 @@ class TestJobProducerInitialization:
     """Test JobProducer initialization and lifecycle."""
 
     def test_initialization_with_default_redis_url(self):
-        """Test JobProducer initializes with default Redis URL."""
+        """Test JobProducer initializes with default Redis URL from config."""
         producer = JobProducer()
-        assert producer.redis_url == "redis://localhost:6379"
+        assert producer.redis_url == "redis://valkey:6379/0"
         assert producer.pool is None
 
     def test_initialization_with_custom_redis_url(self):
