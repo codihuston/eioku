@@ -45,6 +45,7 @@ class TestProcessMLTask:
         )
 
         mock_task_repo.find_by_video_and_type.return_value = [mock_task]
+
         # Make update return a new task with updated status
         def update_side_effect(task):
             return Task(

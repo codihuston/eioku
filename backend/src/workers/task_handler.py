@@ -80,9 +80,7 @@ async def process_ml_task(
         task_repo = SQLAlchemyTaskRepository(session)
         schema_registry = SchemaRegistry()
         projection_sync = ProjectionSyncService(session)
-        artifact_repo = SqlArtifactRepository(
-            session, schema_registry, projection_sync
-        )
+        artifact_repo = SqlArtifactRepository(session, schema_registry, projection_sync)
 
         # Pre-flight check: verify task status is not COMPLETED/CANCELLED
         task = task_repo.find_by_video_and_type(video_id, task_type)
