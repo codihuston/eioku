@@ -212,7 +212,7 @@ This implementation plan breaks down the service separation into discrete, testa
   - Configure max_jobs, job_timeout, max_tries
   - _Requirements: 3.1, 4.9_
 
-- [ ] 11.2 Create process_inference_job() handler in ML Service
+- [x] 11.2 Create process_inference_job() handler in ML Service
   - Read job payload (task_id, task_type, video_id, video_path, config)
   - Execute appropriate ML inference (object detection, face detection, etc.)
   - Create ArtifactEnvelopes with provenance metadata
