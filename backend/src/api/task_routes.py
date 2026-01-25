@@ -1,18 +1,193 @@
 """Task processing and status API endpoints."""
 
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..database.connection import get_db
 from ..repositories.task_repository import SQLAlchemyTaskRepository
 from ..repositories.video_repository import SqlVideoRepository
+from ..services.job_producer import JobProducer
 from ..services.task_orchestrator import TaskOrchestrator
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+# ============================================================================
+# Request/Response Models for OpenAPI Documentation
+# ============================================================================
+
+
+class EnqueueTaskResponse(BaseModel):
+    """Response model for task enqueueing endpoint."""
+
+    task_id: str = Field(
+        ..., description="The unique identifier of the task"
+    )
+    job_id: str = Field(
+        ..., description="The job ID in Redis (format: ml_{task_id})"
+    )
+    status: str = Field(
+        ..., description="Status of the enqueueing operation", example="enqueued"
+    )
+    task_type: str = Field(
+        ..., description="Type of ML task", example="object_detection"
+    )
+    video_id: str = Field(
+        ..., description="The video ID associated with this task"
+    )
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {
+                "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                "job_id": "ml_550e8400-e29b-41d4-a716-446655440000",
+                "status": "enqueued",
+                "task_type": "object_detection",
+                "video_id": "550e8400-e29b-41d4-a716-446655440001",
+            }
+        }
+
+
+class ErrorResponse(BaseModel):
+    """Error response model."""
+
+    detail: str = Field(..., description="Error message")
+
+    class Config:
+        """Pydantic config."""
+
+        json_schema_extra = {
+            "example": {"detail": "Task 550e8400-e29b-41d4-a716-446655440000 not found"}
+        }
+
+
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+
+@router.post(
+    "/{task_id}/enqueue",
+    response_model=EnqueueTaskResponse,
+    responses={
+        404: {"model": ErrorResponse, "description": "Task or video not found"},
+        400: {
+            "model": ErrorResponse,
+            "description": "Task not in PENDING status",
+        },
+        500: {"model": ErrorResponse, "description": "Internal server error"},
+    },
+    summary="Manually enqueue a task for processing",
+    description="Enqueue a task that is in PENDING status to the job queue. "
+    "The task must exist and be in PENDING status to be enqueued successfully.",
+)
+async def enqueue_task(
+    task_id: str = Field(
+        ..., description="The unique identifier of the task to enqueue"
+    ),
+    db: Session = Depends(get_db),
+) -> EnqueueTaskResponse:
+    """Manually enqueue a task for processing.
+    
+    This endpoint allows manual enqueueing of a task that is in PENDING status.
+    The task must exist and be in PENDING status to be enqueued.
+    
+    **Requirements**: 1.3
+    
+    Args:
+        task_id: The task ID to enqueue
+        db: Database session
+        
+    Returns:
+        EnqueueTaskResponse with job_id, task_id, and status
+        
+    Raises:
+        HTTPException 404: If task or video not found
+        HTTPException 400: If task not in PENDING status
+        HTTPException 500: If enqueueing fails
+    """
+    try:
+        # Get task from database
+        task_repo = SQLAlchemyTaskRepository(db)
+        task = task_repo.find_by_id(task_id)
+        
+        if not task:
+            logger.warning(f"Task not found: {task_id}")
+            raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        
+        # Verify task is in PENDING status
+        if task.status != "pending":
+            logger.warning(
+                f"Cannot enqueue task {task_id} in status {task.status}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot enqueue task in status {task.status}. "
+                f"Task must be in PENDING status.",
+            )
+        
+        # Get video details
+        video_repo = SqlVideoRepository(db)
+        video = video_repo.find_by_id(task.video_id)
+        
+        if not video:
+            logger.error(f"Video not found for task {task_id}: {task.video_id}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Video {task.video_id} not found",
+            )
+        
+        # Get default config for task type
+        from ..services.video_discovery_service import VideoDiscoveryService
+        
+        discovery_service = VideoDiscoveryService(None, video_repo)
+        config = discovery_service._get_default_config(task.task_type)
+        
+        # Initialize JobProducer and enqueue task
+        job_producer = JobProducer()
+        await job_producer.initialize()
+        
+        try:
+            job_id = await job_producer.enqueue_task(
+                task_id=task_id,
+                task_type=task.task_type,
+                video_id=str(task.video_id),
+                video_path=video.file_path,
+                config=config,
+            )
+            
+            logger.info(
+                f"Successfully enqueued task {task_id} ({task.task_type}) "
+                f"with job_id {job_id}"
+            )
+            
+            return EnqueueTaskResponse(
+                task_id=task_id,
+                job_id=job_id,
+                status="enqueued",
+                task_type=task.task_type,
+                video_id=str(task.video_id),
+            )
+            
+        finally:
+            await job_producer.close()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to enqueue task {task_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to enqueue task: {str(e)}",
+        )
 
 
 @router.post("/process")
