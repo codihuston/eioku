@@ -347,7 +347,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 17. Checkpoint - API Service Complete
 
-- [ ] 17.1 Ensure all API Service tests pass
+- [x] 18.1 Ensure all API Service tests pass
   - Run pytest on backend/tests/api/
   - Verify video discovery auto-creates tasks
   - Verify manual enqueueing works
