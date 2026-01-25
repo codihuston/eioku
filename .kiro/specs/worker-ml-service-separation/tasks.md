@@ -234,7 +234,7 @@ This implementation plan breaks down the service separation into discrete, testa
   - Implement _alert_long_running_tasks() to alert (never auto-kill)
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10_
 
-- [ ] 11.2 Add reconciler as periodic cron task in arq
+- [x] 12.2 Add reconciler as periodic cron task in arq
   - Schedule reconciler to run every 5 minutes
   - _Requirements: 6.7_
 
