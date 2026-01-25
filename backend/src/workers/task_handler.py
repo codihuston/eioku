@@ -1,7 +1,7 @@
 """Task handler for Worker Service job consumption and result polling.
 
 This module implements the process_ml_task() handler that:
-1. Consumes jobs from the jobs queue (gpu_jobs or cpu_jobs based on GPU_MODE)
+1. Consumes jobs from the jobs queue
 2. Updates task status to RUNNING in PostgreSQL
 3. Enqueues the job to ml_jobs queue for ML Service processing
 4. Polls PostgreSQL for artifact completion with exponential backoff
