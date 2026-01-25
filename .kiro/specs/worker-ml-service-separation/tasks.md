@@ -288,25 +288,25 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 16. Add task cancellation endpoints
 
-- [ ] 16.1 Create POST /tasks/{task_id}/cancel endpoint
+- [x] 16.1 Create POST /tasks/{task_id}/cancel endpoint
   - Mark task as CANCELLED in PostgreSQL
   - Call Job.abort() on arq job
   - Return cancellation status
   - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
-- [ ] 16.2 Create POST /tasks/{task_id}/retry endpoint
+- [x] 16.2 Create POST /tasks/{task_id}/retry endpoint
   - Verify task is in FAILED or CANCELLED status
   - Reset task to PENDING
   - Re-enqueue to appropriate queue
   - _Requirements: 10.1_
 
-- [ ] 16.3 Create GET /tasks endpoint with filtering and sorting
+- [x] 16.3 Create GET /tasks endpoint with filtering and sorting
   - Support filtering by status, task_type, video_id
   - Support sorting by created_at, started_at, running_time
   - Return task list with pagination
   - _Requirements: 10.7, 10.8_
 
-- [ ]* 16.4 Write unit tests for task management endpoints
+- [x]* 16.4 Write unit tests for task management endpoints
   - Test cancellation
   - Test retry
   - Test filtering and sorting
