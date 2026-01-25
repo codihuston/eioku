@@ -146,20 +146,19 @@ This implementation plan breaks down the service separation into discrete, testa
   - Test job_id format "ml_{task_id}"
   - _Requirements: 4.1, 4.5_
 
-### 8. Create ML Client for Worker Service
+### 8. Implement Worker Service job enqueueing to ml_jobs queue
 
-- [x] 8.1 Create MLClient class in backend/src/services/
-  - Implement async httpx client with connection pooling
-  - Implement infer() method for each task type
-  - Set timeout to 600 seconds for long-running inference
-  - Handle HTTP errors and retry logic
-  - _Requirements: 18.1, 18.2, 18.3, 18.4_
+- [x] 8.1 Create job enqueueing logic for ml_jobs queue
+  - Implement enqueue_to_ml_jobs() to enqueue jobs to Redis ml_jobs queue
+  - Set job payload with task_id, task_type, video_id, video_path, config
+  - Use arq's XADD to add to ml_jobs stream
+  - _Requirements: 2.7, 4.8_
 
-- [x]* 8.2 Write unit test for MLClient
-  - Test HTTP requests to ML Service
-  - Test response parsing
-  - Test timeout handling
-  - _Requirements: 18.1_
+- [x]* 8.2 Write unit test for ml_jobs enqueueing
+  - Test job is enqueued to ml_jobs queue
+  - Test job payload structure is correct
+  - Test job_id format
+  - _Requirements: 2.7, 4.8_
 
 ### 9. Create arq worker configuration
 
@@ -176,51 +175,77 @@ This implementation plan breaks down the service separation into discrete, testa
   - Test auto mode detects GPU correctly
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-### 10. Implement task handler for arq
+### 10. Implement task handler for arq (Worker Service)
 
 - [ ] 10.1 Create process_ml_task() handler in backend/src/workers/
   - Pre-flight check: verify task status is not COMPLETED/CANCELLED
-  - Update task status to RUNNING
-  - Call MLClient.infer() to dispatch to ML Service
+  - Update task status to RUNNING in PostgreSQL
+  - Enqueue job to ml_jobs queue (shared queue pattern)
+  - Begin polling PostgreSQL for artifact completion
   - Handle asyncio.CancelledError for task cancellation
   - Handle other exceptions and mark task as FAILED
-  - _Requirements: 2.6, 2.7, 5.2, 5.3, 14.1, 20.1_
+  - _Requirements: 2.6, 2.7, 2.8, 5.2, 5.3, 14.1, 20.1_
 
-- [ ] 10.2 Create artifact transformation logic
-  - Transform ML response to ArtifactEnvelopes
+- [ ] 10.2 Create artifact polling logic
+  - Implement poll_for_artifacts() with exponential backoff
+  - Check artifacts table for task_id
+  - Verify all expected artifacts are present
+  - Update task status to COMPLETED when all artifacts found
+  - Acknowledge job in Redis (XACK)
+  - _Requirements: 2.8, 2.9, 2.10, 5.3_
+
+- [ ] 10.3 Create artifact envelope transformation logic
+  - Transform ML response to ArtifactEnvelopes (when received from ml_jobs)
   - Extract individual detections/segments from batch response
   - Copy provenance metadata (config_hash, input_hash, etc.)
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 22.1, 22.2, 22.3, 22.4, 22.5_
-
-- [ ] 10.3 Create artifact persistence logic
-  - Batch insert ArtifactEnvelopes to PostgreSQL
-  - Update task status to COMPLETED
-  - Acknowledge job in Redis (XACK)
-  - _Requirements: 2.8, 2.9, 2.10, 8.2, 16.1_
 
 - [ ]* 10.4 Write property test for task handler
   - **Property 4: Worker Job Consumption and Acknowledgment**
   - **Validates: Requirements 2.1, 2.6, 5.2, 5.3**
 
-### 11. Implement reconciler
+### 11. Implement ML Service job consumption from ml_jobs queue
 
-- [ ] 11.1 Create Reconciler class in backend/src/workers/
+- [ ] 11.1 Create ML Service arq worker configuration
+  - Configure arq to consume from ml_jobs queue
+  - Set up consumer group for ml_jobs
+  - Configure max_jobs, job_timeout, max_tries
+  - _Requirements: 3.1, 4.9_
+
+- [ ] 11.2 Create process_inference_job() handler in ML Service
+  - Read job payload (task_id, task_type, video_id, video_path, config)
+  - Execute appropriate ML inference (object detection, face detection, etc.)
+  - Create ArtifactEnvelopes with provenance metadata
+  - Batch insert artifacts to PostgreSQL in single transaction
+  - Acknowledge job in Redis (XACK)
+  - Handle inference failures (don't acknowledge, allow retry)
+  - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 16.1_
+
+- [ ]* 11.3 Write unit test for ML Service job handler
+  - Test job consumption from ml_jobs queue
+  - Test artifact creation and persistence
+  - Test job acknowledgment
+  - _Requirements: 3.1, 3.2_
+
+### 12. Implement reconciler
+
+- [ ] 12.1 Create Reconciler class in backend/src/workers/
   - Implement _sync_pending_tasks() to re-enqueue orphaned PENDING tasks
   - Implement _sync_running_tasks() to sync RUNNING tasks with Redis state
   - Implement _alert_long_running_tasks() to alert (never auto-kill)
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 6.10_
 
-- [ ] 11.2 Add reconciler as periodic cron task in arq
+- [ ] 12.2 Add reconciler as periodic cron task in arq
   - Schedule reconciler to run every 5 minutes
   - _Requirements: 6.7_
 
-- [ ]* 11.3 Write property test for reconciliation
+- [ ]* 12.3 Write property test for reconciliation
   - **Property 7: Reconciliation Recovery**
   - **Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6**
 
-### 12. Checkpoint - Job Queue Complete
+### 13. Checkpoint - Job Queue Complete
 
-- [ ] 12.1 Ensure all job queue tests pass
+- [ ] 13.1 Ensure all job queue tests pass
   - Run pytest on backend/tests/workers/
   - Verify job consumption from Redis
   - Verify artifact persistence
@@ -230,66 +255,66 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ## Phase 3: API Service Updates (Days 3-4)
 
-### 13. Update video discovery to auto-create tasks
+### 14. Update video discovery to auto-create tasks
 
-- [ ] 13.1 Create VideoDiscoveryService
+- [ ] 14.1 Create VideoDiscoveryService
   - Implement discover_and_queue_tasks() to auto-create 6 tasks per video
   - Implement _get_default_config() for each task type
   - Call JobProducer to enqueue tasks to appropriate queues
   - _Requirements: 1.2, 1.3_
 
-- [ ] 13.2 Integrate VideoDiscoveryService into video discovery workflow
+- [ ] 14.2 Integrate VideoDiscoveryService into video discovery workflow
   - Update existing video discovery to call VideoDiscoveryService
   - Ensure tasks are auto-created and auto-queued on video discovery
   - _Requirements: 1.2, 1.3_
 
-- [ ]* 13.3 Write property test for video discovery
+- [ ]* 14.3 Write property test for video discovery
   - **Property 1: Video Discovery Auto-Creates Tasks**
   - **Validates: Requirements 1.2, 1.3**
 
-### 14. Add manual task enqueueing endpoint
+### 15. Add manual task enqueueing endpoint
 
-- [ ] 14.1 Create POST /tasks/{task_id}/enqueue endpoint
+- [ ] 15.1 Create POST /tasks/{task_id}/enqueue endpoint
   - Verify task exists and is in PENDING status
   - Call JobProducer to enqueue task
   - Return job_id and status
   - _Requirements: 1.3_
 
-- [ ]* 14.2 Write unit test for manual enqueueing endpoint
+- [ ]* 15.2 Write unit test for manual enqueueing endpoint
   - Test successful enqueueing
   - Test error when task not found
   - Test error when task not in PENDING status
   - _Requirements: 1.3_
 
-### 15. Add task cancellation endpoints
+### 16. Add task cancellation endpoints
 
-- [ ] 15.1 Create POST /tasks/{task_id}/cancel endpoint
+- [ ] 16.1 Create POST /tasks/{task_id}/cancel endpoint
   - Mark task as CANCELLED in PostgreSQL
   - Call Job.abort() on arq job
   - Return cancellation status
   - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
-- [ ] 15.2 Create POST /tasks/{task_id}/retry endpoint
+- [ ] 16.2 Create POST /tasks/{task_id}/retry endpoint
   - Verify task is in FAILED or CANCELLED status
   - Reset task to PENDING
   - Re-enqueue to appropriate queue
   - _Requirements: 10.1_
 
-- [ ] 15.3 Create GET /tasks endpoint with filtering and sorting
+- [ ] 16.3 Create GET /tasks endpoint with filtering and sorting
   - Support filtering by status, task_type, video_id
   - Support sorting by created_at, started_at, running_time
   - Return task list with pagination
   - _Requirements: 10.7, 10.8_
 
-- [ ]* 15.4 Write unit tests for task management endpoints
+- [ ]* 16.4 Write unit tests for task management endpoints
   - Test cancellation
   - Test retry
   - Test filtering and sorting
   - _Requirements: 10.1, 10.7, 10.8_
 
-### 16. Add artifact schema validation
+### 17. Add artifact schema validation
 
-- [ ] 16.1 Create artifact payload schema models
+- [ ] 17.1 Create artifact payload schema models
   - Create ObjectDetectionV1 schema
   - Create FaceDetectionV1 schema
   - Create TranscriptSegmentV1 schema
@@ -298,19 +323,19 @@ This implementation plan breaks down the service separation into discrete, testa
   - Create SceneV1 schema
   - _Requirements: 23.1, 23.2, 23.6_
 
-- [ ] 16.2 Integrate schema validation into artifact persistence
+- [ ] 17.2 Integrate schema validation into artifact persistence
   - Validate payload_json against schema model on insert
   - Reject invalid payloads with error message
   - _Requirements: 23.3, 23.4, 23.5_
 
-- [ ]* 16.3 Write unit tests for artifact schema validation
+- [ ]* 17.3 Write unit tests for artifact schema validation
   - Test valid payloads pass validation
   - Test invalid payloads are rejected
   - _Requirements: 23.3, 23.4_
 
-### 17. Checkpoint - API Service Complete
+### 18. Checkpoint - API Service Complete
 
-- [ ] 17.1 Ensure all API Service tests pass
+- [ ] 18.1 Ensure all API Service tests pass
   - Run pytest on backend/tests/api/
   - Verify video discovery auto-creates tasks
   - Verify manual enqueueing works
@@ -321,49 +346,49 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ## Phase 4: Service Separation & Deployment (Days 4-5)
 
-### 18. Create separate entry points
+### 19. Create separate entry points
 
-- [ ] 18.1 Create backend/src/main_api.py
+- [ ] 19.1 Create backend/src/main_api.py
   - FastAPI app for API Service only
   - No arq consumer initialization
   - Database connection pool (max_size=20)
   - Redis connection for job enqueueing
   - _Requirements: 9.3, 9.4_
 
-- [ ] 18.2 Create backend/src/main_worker.py
+- [ ] 19.2 Create backend/src/main_worker.py
   - arq worker entry point
   - No HTTP endpoints
   - Database connection pool (max_size=10)
   - Redis connection for job consumption
   - _Requirements: 9.3, 9.4_
 
-- [ ]* 18.3 Write unit tests for entry points
+- [ ]* 19.3 Write unit tests for entry points
   - Test API Service doesn't start arq consumer
   - Test Worker Service doesn't expose HTTP endpoints
   - _Requirements: 9.3, 9.4_
 
-### 19. Create separate Dockerfiles
+### 20. Create separate Dockerfiles
 
-- [ ] 19.1 Create dev/Dockerfile.api
+- [ ] 20.1 Create dev/Dockerfile.api
   - Lighter image without ML dependencies
   - Install only FastAPI, uvicorn, database drivers
   - Expose port 8000
   - _Requirements: 9.5_
 
-- [ ] 19.2 Create dev/Dockerfile.worker
+- [ ] 20.2 Create dev/Dockerfile.worker
   - Include arq, httpx, database drivers
   - No ML model files
   - No HTTP server
   - _Requirements: 9.6_
 
-- [ ] 19.3 Create dev/Dockerfile.ml
+- [ ] 20.3 Create dev/Dockerfile.ml
   - Include all ML dependencies
   - Include model cache directory
   - _Requirements: 9.7_
 
-### 20. Update docker-compose.yml
+### 21. Update docker-compose.yml
 
-- [ ] 20.1 Update docker-compose.yml with separate services
+- [ ] 21.1 Update docker-compose.yml with separate services
   - Add api service (port 8000)
   - Add worker-gpu service (GPU_MODE=gpu)
   - Add worker-cpu service (GPU_MODE=cpu)
@@ -372,15 +397,15 @@ This implementation plan breaks down the service separation into discrete, testa
   - Update nginx to route to api service
   - _Requirements: 9.1, 9.2, 9.8, 9.9_
 
-- [ ]* 20.2 Write integration test for docker-compose
+- [ ]* 21.2 Write integration test for docker-compose
   - Test all services start correctly
   - Test services can communicate
   - Test health endpoints respond
   - _Requirements: 9.1, 9.2_
 
-### 21. Implement backward compatibility
+### 22. Implement backward compatibility
 
-- [ ] 21.1 Verify all existing REST endpoints still work
+- [ ] 22.1 Verify all existing REST endpoints still work
   - Test GET /videos
   - Test GET /tasks
   - Test GET /artifacts
@@ -388,13 +413,13 @@ This implementation plan breaks down the service separation into discrete, testa
   - Test POST endpoints
   - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6_
 
-- [ ]* 21.2 Write property test for backward compatibility
+- [ ]* 22.2 Write property test for backward compatibility
   - **Property 12: Backward Compatibility**
   - **Validates: Requirements 13.1, 13.2, 13.3, 13.4, 13.5, 13.6**
 
-### 22. Implement observability
+### 23. Implement observability
 
-- [ ] 22.1 Add structured logging to all services
+- [ ] 23.1 Add structured logging to all services
   - Log service startup with configuration
   - Log job enqueueing with task_id and queue
   - Log job consumption with task_id
@@ -403,14 +428,14 @@ This implementation plan breaks down the service separation into discrete, testa
   - Log reconciliation actions
   - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6_
 
-- [ ]* 22.2 Write unit tests for logging
+- [ ]* 23.2 Write unit tests for logging
   - Test logs contain required fields
   - Test logs are structured (JSON format)
   - _Requirements: 11.1_
 
-### 23. Checkpoint - Service Separation Complete
+### 24. Checkpoint - Service Separation Complete
 
-- [ ] 23.1 Ensure all integration tests pass
+- [ ] 24.1 Ensure all integration tests pass
   - Run full test suite
   - Verify all services work together
   - Verify backward compatibility
@@ -420,93 +445,93 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ## Phase 5: Advanced Features (Days 5-6)
 
-### 24. Implement GPU semaphore concurrency control
+### 25. Implement GPU semaphore concurrency control
 
-- [ ] 24.1 Verify GPU semaphore limits concurrent requests
+- [ ] 25.1 Verify GPU semaphore limits concurrent requests
   - Test that max GPU_CONCURRENCY requests run simultaneously
   - Test that excess requests are queued
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ]* 24.2 Write property test for GPU semaphore
+- [ ]* 25.2 Write property test for GPU semaphore
   - **Property 8: GPU Semaphore Concurrency Control**
   - **Validates: Requirements 7.1, 7.2, 7.3, 7.4, 7.5**
 
-### 25. Implement horizontal scaling
+### 26. Implement horizontal scaling
 
-- [ ] 25.1 Test multiple Worker Service instances
+- [ ] 26.1 Test multiple Worker Service instances
   - Deploy multiple worker-gpu instances
   - Deploy multiple worker-cpu instances
   - Verify jobs are distributed without duplicates
   - _Requirements: 15.1, 15.2_
 
-- [ ]* 25.2 Write property test for horizontal scaling
+- [ ]* 26.2 Write property test for horizontal scaling
   - **Property 11: Horizontal Scaling**
   - **Validates: Requirements 15.1, 15.2**
 
-### 26. Implement error handling and resilience
+### 27. Implement error handling and resilience
 
-- [ ] 26.1 Test error scenarios
+- [ ] 27.1 Test error scenarios
   - Test ML Service unavailable → retry with backoff
   - Test PostgreSQL unavailable → retry
   - Test Redis unavailable → fail gracefully
   - Test artifact insert failure → mark task as FAILED
   - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7_
 
-- [ ]* 26.2 Write property test for error handling
+- [ ]* 27.2 Write property test for error handling
   - **Property 10: Error Handling and Retry**
   - **Validates: Requirements 14.1, 14.2, 14.3, 14.7**
 
-### 27. Implement graceful shutdown
+### 28. Implement graceful shutdown
 
-- [ ] 27.1 Test graceful shutdown behavior
+- [ ] 28.1 Test graceful shutdown behavior
   - Send SIGTERM to Worker Service
   - Verify current job completes
   - Verify incomplete jobs remain in Redis
   - Verify another worker picks up incomplete job
   - _Requirements: 20.1, 20.2, 20.3_
 
-- [ ]* 27.2 Write property test for graceful shutdown
+- [ ]* 28.2 Write property test for graceful shutdown
   - **Property 15: Graceful Shutdown**
   - **Validates: Requirements 20.1, 20.2, 20.3**
 
-### 28. Implement job idempotency
+### 29. Implement job idempotency
 
-- [ ] 28.1 Test job idempotency
+- [ ] 29.1 Test job idempotency
   - Enqueue same job twice
   - Verify only one job is processed
   - Verify duplicate job is deduplicated
   - _Requirements: 19.1, 19.2, 19.3_
 
-- [ ]* 28.2 Write property test for job idempotency
+- [ ]* 29.2 Write property test for job idempotency
   - **Property 14: Job Idempotency**
   - **Validates: Requirements 19.2, 19.3**
 
-### 29. Implement service isolation
+### 30. Implement service isolation
 
-- [ ] 29.1 Verify service isolation
+- [ ] 30.1 Verify service isolation
   - Verify API Service doesn't run arq consumer
   - Verify Worker Service doesn't expose HTTP endpoints
   - Verify ML Service doesn't access PostgreSQL
   - _Requirements: 9.3, 9.4, 9.10, 9.11_
 
-- [ ]* 29.2 Write property test for service isolation
+- [ ]* 30.2 Write property test for service isolation
   - **Property 16: Service Isolation**
   - **Validates: Requirements 9.3, 9.4, 9.10, 9.11**
 
-### 30. Final checkpoint - All features complete
+### 31. Final checkpoint - All features complete
 
-- [ ] 30.1 Run full test suite
+- [ ] 31.1 Run full test suite
   - Run all unit tests
   - Run all property-based tests
   - Run all integration tests
   - Verify all tests pass
 
-- [ ] 30.2 Verify all requirements are met
+- [ ] 31.2 Verify all requirements are met
   - Check each requirement has corresponding test
   - Check each property is implemented
   - Check backward compatibility maintained
 
-- [ ] 30.3 Documentation and cleanup
+- [ ] 31.3 Documentation and cleanup
   - Update README with new architecture
   - Document environment variables
   - Document deployment procedures
