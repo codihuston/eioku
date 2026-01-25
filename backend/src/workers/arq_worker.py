@@ -9,14 +9,23 @@ tasks it can handle:
 
 All jobs are enqueued to the single 'jobs' queue. Workers filter based on
 their GPU_MODE capability.
+
+The worker also runs a periodic reconciliation task every 5 minutes to:
+- Detect and recover from Redis data loss (missing jobs for PENDING tasks)
+- Detect and recover from job loss (RUNNING tasks with no job in Redis)
+- Sync job completion status from Redis to PostgreSQL
+- Alert on long-running tasks
 """
 
 import logging
 import os
 
 import torch
+from arq import cron
 
 from ..config.redis_config import REDIS_SETTINGS
+from ..database.connection import get_db
+from ..workers.reconciler import Reconciler
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +65,43 @@ def get_gpu_mode() -> str:
     return GPU_MODE
 
 
+async def reconcile_tasks(ctx) -> dict:
+    """Periodic reconciliation task (runs every 5 minutes).
+
+    This cron task synchronizes PostgreSQL task state with Redis job state:
+    1. Checks all PENDING tasks and re-enqueues missing jobs (handles Redis data loss)
+    2. Checks all RUNNING tasks and syncs with Redis state
+    3. Alerts on long-running tasks (never auto-kills)
+
+    Args:
+        ctx: arq context with access to worker configuration
+
+    Returns:
+        Dictionary with reconciliation statistics
+    """
+    try:
+        logger.info("Starting periodic reconciliation task")
+
+        # Get database session
+        session = next(get_db())
+
+        try:
+            # Create reconciler and run all checks
+            reconciler = Reconciler(session=session)
+            stats = await reconciler.run()
+
+            logger.info(f"Reconciliation complete: {stats}")
+            return stats
+
+        finally:
+            # Close database session
+            session.close()
+
+    except Exception as e:
+        logger.error(f"Error in reconciliation task: {e}", exc_info=True)
+        return {"error": str(e)}
+
+
 class WorkerSettings:
     """arq worker configuration.
 
@@ -65,6 +111,7 @@ class WorkerSettings:
     - Job processing parameters (max_jobs, timeout, retries)
     - Job abort capability for cancellation support
     - GPU_MODE to filter which tasks this worker can handle
+    - Periodic reconciliation task (every 5 minutes)
     """
 
     # Job handler functions (will be populated when handlers are implemented)
@@ -97,3 +144,8 @@ class WorkerSettings:
             f"max_jobs={self.max_jobs}, "
             f"job_timeout={self.job_timeout}s"
         )
+
+
+# Periodic reconciliation task (every 5 minutes)
+# Runs at minutes: 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55
+cron_reconcile = cron(reconcile_tasks, minute=set(range(0, 60, 5)))
