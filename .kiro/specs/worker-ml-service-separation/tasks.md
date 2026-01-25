@@ -374,26 +374,26 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 20. Create separate Dockerfiles
 
-- [ ] 20.1 Create dev/Dockerfile.api
+- [x] 20.1 Create dev/Dockerfile.api
   - Lighter image without ML dependencies
   - Install only FastAPI, uvicorn, database drivers
   - Expose port 8000
   - _Requirements: 9.5_
 
-- [ ] 20.2 Create dev/Dockerfile.worker
+- [x] 20.2 Create dev/Dockerfile.worker
   - Include arq, httpx, database drivers
   - No ML model files
   - No HTTP server
   - _Requirements: 9.6_
 
-- [ ] 20.3 Create dev/Dockerfile.ml
+- [x] 20.3 Create dev/Dockerfile.ml
   - Include all ML dependencies
   - Include model cache directory
   - _Requirements: 9.7_
 
 ### 21. Update docker-compose.yml
 
-- [ ] 21.1 Update docker-compose.yml with separate services
+- [x] 21.1 Update docker-compose.yml with separate services
   - Add api service (port 8000)
   - Add worker-gpu service (GPU_MODE=gpu)
   - Add worker-cpu service (GPU_MODE=cpu)

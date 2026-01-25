@@ -1108,7 +1108,7 @@ async def startup_worker_pools() -> dict:
             global_pool_manager.start_all()
 
             # Store globally (simple approach)
-            import src.main as main_module
+            import src.main_api as main_module
 
             main_module.global_pool_manager = global_pool_manager
 

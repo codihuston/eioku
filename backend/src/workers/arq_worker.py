@@ -1,26 +1,19 @@
 """arq worker configuration for Worker Service.
 
-This module configures the arq worker to consume jobs from the single 'jobs'
-queue. The worker reads the GPU_MODE environment variable to determine which
-tasks it can handle:
-- 'gpu': Only handle GPU-required tasks
-- 'cpu': Only handle CPU-capable tasks
-- 'auto': Auto-detect GPU and handle appropriate tasks
+This module configures the arq worker to consume jobs from the 'jobs' queue.
+The worker is stateless and doesn't care about GPU - it just:
+1. Consumes jobs from Redis
+2. Updates task status to RUNNING
+3. Enqueues to ml_jobs for ML Service processing
+4. Polls for results and persists artifacts
+5. Runs periodic reconciliation to recover from failures
 
-All jobs are enqueued to the single 'jobs' queue. Workers filter based on
-their GPU_MODE capability.
-
-The worker also runs a periodic reconciliation task every 5 minutes to:
-- Detect and recover from Redis data loss (missing jobs for PENDING tasks)
-- Detect and recover from job loss (RUNNING tasks with no job in Redis)
-- Sync job completion status from Redis to PostgreSQL
-- Alert on long-running tasks
+The ML Service handles all GPU concerns.
 """
 
 import logging
 import os
 
-import torch
 from arq import cron
 
 from ..config.redis_config import REDIS_SETTINGS
@@ -28,41 +21,6 @@ from ..database.connection import get_db
 from ..workers.reconciler import Reconciler
 
 logger = logging.getLogger(__name__)
-
-
-# Determine GPU mode from environment
-GPU_MODE = os.getenv("GPU_MODE", "auto")  # gpu, cpu, or auto
-
-
-def get_gpu_mode() -> str:
-    """Determine the GPU mode for this worker.
-
-    Returns:
-        GPU mode: 'gpu', 'cpu', or 'auto'
-
-    Raises:
-        ValueError: If GPU_MODE is not one of 'gpu', 'cpu', or 'auto'
-    """
-    if GPU_MODE not in ("gpu", "cpu", "auto"):
-        raise ValueError(
-            f"Invalid GPU_MODE: {GPU_MODE}. Must be 'gpu', 'cpu', or 'auto'"
-        )
-
-    if GPU_MODE == "auto":
-        # Auto-detect GPU availability
-        if torch.cuda.is_available():
-            logger.info(
-                f"GPU_MODE=auto: GPU detected ({torch.cuda.get_device_name(0)}) - "
-                "will handle GPU-required tasks"
-            )
-            return "gpu"
-        else:
-            logger.info(
-                "GPU_MODE=auto: GPU not available - will handle CPU-capable tasks"
-            )
-            return "cpu"
-
-    return GPU_MODE
 
 
 async def reconcile_tasks(ctx) -> dict:
@@ -110,15 +68,13 @@ class WorkerSettings:
     - Redis connection settings
     - Job processing parameters (max_jobs, timeout, retries)
     - Job abort capability for cancellation support
-    - GPU_MODE to filter which tasks this worker can handle
     - Periodic reconciliation task (every 5 minutes)
     """
 
     # Job handler functions (will be populated when handlers are implemented)
     functions = []
 
-    # All workers consume from the single 'jobs' queue
-    # They filter based on GPU_MODE capability
+    # Worker consumes from the single 'jobs' queue
     queue_name = "jobs"
 
     # Redis connection settings (centralized in redis_config.py)
@@ -132,14 +88,10 @@ class WorkerSettings:
     # Enable job abort for cancellation support
     allow_abort_jobs = True
 
-    # GPU mode for task filtering
-    gpu_mode = get_gpu_mode()
-
     def __init__(self):
         """Initialize worker settings and log configuration."""
         logger.info(
-            f"Worker configured: GPU_MODE={GPU_MODE}, "
-            f"effective_mode={self.gpu_mode}, "
+            f"Worker configured: "
             f"queue={self.queue_name}, "
             f"max_jobs={self.max_jobs}, "
             f"job_timeout={self.job_timeout}s"

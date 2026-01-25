@@ -297,30 +297,20 @@ class Reconciler:
                 decode_responses=True,
             )
 
-            # Check if job exists in any queue
-            # Jobs are stored in Redis streams with keys like "arq:jobs"
-            # or "arq:gpu_jobs"
+            # Check if job exists in Redis
+            # Jobs are stored in Redis with key "arq:job:{job_id}"
             job_id = f"ml_{task_id}"
+            job_key = f"arq:job:{job_id}"
 
-            # Check common queue names
-            queue_names = ["jobs", "gpu_jobs", "cpu_jobs", "ml_jobs"]
+            try:
+                # Try to get the job from Redis
+                job_data = r.get(job_key)
 
-            for queue_name in queue_names:
-                # Check if job exists in the queue
-                # arq stores jobs in a stream with key "arq:{queue_name}"
-                # Use XLEN to check if stream has any entries
-                # This is a simplified check - in reality we'd need to check
-                # if the specific job_id is in the stream
-                try:
-                    # Try to get the job from Redis
-                    job_key = f"arq:job:{job_id}"
-                    job_data = r.get(job_key)
-
-                    if job_data:
-                        logger.debug(f"Job {job_id} found in Redis")
-                        return True
-                except Exception as e:
-                    logger.debug(f"Error checking job {job_id} in {queue_name}: {e}")
+                if job_data:
+                    logger.debug(f"Job {job_id} found in Redis")
+                    return True
+            except Exception as e:
+                logger.debug(f"Error checking job {job_id}: {e}")
 
             logger.debug(f"Job {job_id} not found in Redis")
             return False
