@@ -142,19 +142,20 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Pool manager created")
 
         logger.info("1️⃣2️⃣ Adding worker pools from profile...")
-        for task_type_str, worker_config in profile.worker_configs.items():
-            pool_manager.add_worker_pool(worker_config)
-            logger.info(
-                f"✅ Added {task_type_str} pool: {worker_config.worker_count} workers"
-            )
+        # DISABLED: Worker pools are now run in separate worker service
+        # for task_type_str, worker_config in profile.worker_configs.items():
+        #     pool_manager.add_worker_pool(worker_config)
+        #     logger.info(
+        #         f"✅ Added {task_type_str} pool: {worker_config.worker_count} workers"
+        #     )
 
         logger.info("1️⃣3️⃣ Starting all worker pools...")
         # Skip starting workers in test mode
-        if os.getenv("TESTING") != "true":
-            pool_manager.start_all()
-            logger.info("✅ Worker pools started")
-        else:
-            logger.info("⏭️  Skipping worker pool startup (test mode)")
+        # if os.getenv("TESTING") != "true":
+        #     pool_manager.start_all()
+        #     logger.info("✅ Worker pools started")
+        # else:
+        logger.info("⏭️  Skipping worker pool startup (API service only)")
 
         logger.info("🏁 Storing in app state...")
         app.state.pool_manager = pool_manager
