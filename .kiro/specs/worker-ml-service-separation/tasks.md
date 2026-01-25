@@ -318,7 +318,7 @@ This implementation plan breaks down the service separation into discrete, testa
 
 ### 17. Add artifact schema validation
 
-- [ ] 17.1 Create artifact payload schema models
+- [x] 17.1 Create artifact payload schema models
   - Create ObjectDetectionV1 schema
   - Create FaceDetectionV1 schema
   - Create TranscriptSegmentV1 schema
@@ -327,13 +327,13 @@ This implementation plan breaks down the service separation into discrete, testa
   - Create SceneV1 schema
   - _Requirements: 22.1_
 
-- [ ] 17.2 Integrate schema validation into artifact transformation
+- [x] 17.2 Integrate schema validation into artifact transformation
   - Validate payload_json against schema model during transformation
   - Reject invalid payloads with error message
   - Mark task as FAILED if validation fails
   - _Requirements: 22.2, 22.3_
 
-- [ ]* 17.3 Write unit tests for artifact schema validation
+- [x]* 17.3 Write unit tests for artifact schema validation
   - Test valid payloads pass validation
   - Test invalid payloads are rejected
   - _Requirements: 22.2, 22.3_
