@@ -187,18 +187,22 @@ This implementation plan breaks down the service separation into discrete, testa
   - _Requirements: 2.6, 2.7, 2.8, 5.2, 5.3, 14.1, 20.1_
 
 - [x] 10.2 Create artifact polling logic
-  - Implement poll_for_artifacts() with exponential backoff
-  - Check artifacts table for task_id
-  - Verify all expected artifacts are present
-  - Update task status to COMPLETED when all artifacts found
+  - Implement poll_for_ml_results() with exponential backoff
+  - Check Redis for key "ml_result:{task_id}"
+  - Deserialize JSON results when found
+  - Handle result expiration (30 minute TTL)
+  - Update task status to COMPLETED when results processed
   - Acknowledge job in Redis (XACK)
-  - _Requirements: 2.8, 2.9, 2.10, 5.3_
+  - _Requirements: 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
 
 - [x] 10.3 Create artifact envelope transformation logic
-  - Transform ML response to ArtifactEnvelopes (when received from ml_jobs)
+  - Transform ML response from Redis to ArtifactEnvelopes
   - Extract individual detections/segments from batch response
   - Copy provenance metadata (config_hash, input_hash, etc.)
-  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 22.1, 22.2, 22.3, 22.4, 22.5_
+  - Validate payload_json against schema models
+  - Batch insert to PostgreSQL in single transaction
+  - Delete Redis result key after successful persistence
+  - _Requirements: 21.1, 21.2, 21.3, 21.4, 21.5, 21.6, 21.7, 22.2, 22.3_
 
 - [ ]* 10.4 Write property test for task handler
   - **Property 4: Worker Job Consumption and Acknowledgment**
@@ -215,11 +219,11 @@ This implementation plan breaks down the service separation into discrete, testa
 - [x] 11.2 Create process_inference_job() handler in ML Service
   - Read job payload (task_id, task_type, video_id, video_path, config)
   - Execute appropriate ML inference (object detection, face detection, etc.)
-  - Create ArtifactEnvelopes with provenance metadata
-  - Batch insert artifacts to PostgreSQL in single transaction
+  - Serialize results to JSON with provenance metadata (config_hash, input_hash, run_id, producer, model_profile)
+  - Store results in Redis with key "ml_result:{task_id}" and TTL 1800 seconds (30 minutes)
   - Acknowledge job in Redis (XACK)
   - Handle inference failures (don't acknowledge, allow retry)
-  - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 16.1_
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
 
 - [ ]* 11.3 Write unit test for ML Service job handler
   - Test job consumption from ml_jobs queue
@@ -321,17 +325,18 @@ This implementation plan breaks down the service separation into discrete, testa
   - Create OCRDetectionV1 schema
   - Create PlaceClassificationV1 schema
   - Create SceneV1 schema
-  - _Requirements: 23.1, 23.2, 23.6_
+  - _Requirements: 22.1_
 
-- [ ] 17.2 Integrate schema validation into artifact persistence
-  - Validate payload_json against schema model on insert
+- [ ] 17.2 Integrate schema validation into artifact transformation
+  - Validate payload_json against schema model during transformation
   - Reject invalid payloads with error message
-  - _Requirements: 23.3, 23.4, 23.5_
+  - Mark task as FAILED if validation fails
+  - _Requirements: 22.2, 22.3_
 
 - [ ]* 17.3 Write unit tests for artifact schema validation
   - Test valid payloads pass validation
   - Test invalid payloads are rejected
-  - _Requirements: 23.3, 23.4_
+  - _Requirements: 22.2, 22.3_
 
 ### 18. Checkpoint - API Service Complete
 
