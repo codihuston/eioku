@@ -22,15 +22,13 @@ from ..models.responses import (
     ObjectDetectionResponse,
     OCRDetection,
     OCRResponse,
-    PlaceClassification,
-    PlacePrediction,
     PlaceDetectionResponse,
-    Scene,
     SceneDetectionResponse,
     Segment,
     TranscriptionResponse,
 )
-from ..utils.hashing import compute_config_hash, compute_input_hash
+from ..utils.hashing import compute_config_hash
+from ..utils.input_validation import validate_inference_input
 
 if TYPE_CHECKING:
     from ..services.model_manager import ModelManager
@@ -45,7 +43,9 @@ MODEL_MANAGER: "ModelManager | None" = None
 GPU_AVAILABLE: bool = False
 
 
-def set_globals(semaphore: asyncio.Semaphore, manager: "ModelManager", gpu_available: bool = False):
+def set_globals(
+    semaphore: asyncio.Semaphore, manager: "ModelManager", gpu_available: bool = False
+):
     """Set global references for inference endpoints.
 
     Args:
@@ -61,7 +61,7 @@ def set_globals(semaphore: asyncio.Semaphore, manager: "ModelManager", gpu_avail
 
 def _get_device() -> str:
     """Get device string for model inference.
-    
+
     Returns "cuda" if GPU is available, "cpu" otherwise.
     This ensures models respect our GPU availability flag.
     """
@@ -70,31 +70,34 @@ def _get_device() -> str:
 
 async def _acquire_gpu_if_available():
     """Context manager that acquires GPU semaphore only if GPU is available.
-    
+
     Returns a context manager that either acquires the GPU semaphore (if GPU available)
     or does nothing (if CPU-only mode).
     """
+
     class GPUContextManager:
         def __init__(self, semaphore: asyncio.Semaphore | None, gpu_available: bool):
             self.semaphore = semaphore
             self.gpu_available = gpu_available
             self.acquired = False
-        
+
         async def __aenter__(self):
             if self.gpu_available and self.semaphore is not None:
                 await self.semaphore.acquire()
                 self.acquired = True
                 logger.debug("GPU semaphore acquired")
             else:
-                logger.debug("Running on CPU (GPU not available or semaphore not initialized)")
+                logger.debug(
+                    "Running on CPU (GPU not available or semaphore not initialized)"
+                )
             return self
-        
+
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             if self.acquired and self.semaphore is not None:
                 self.semaphore.release()
                 logger.debug("GPU semaphore released")
             return False
-    
+
     return GPUContextManager(GPU_SEMAPHORE, GPU_AVAILABLE)
 
 
@@ -109,6 +112,9 @@ async def detect_objects(request: ObjectDetectionRequest) -> ObjectDetectionResp
         ObjectDetectionResponse with detections and provenance metadata
     """
     try:
+        # Validate input (checks file exists and hash matches)
+        validate_inference_input(request.video_path, request.input_hash)
+
         async with await _acquire_gpu_if_available():
             from ultralytics import YOLO
 
@@ -148,7 +154,7 @@ async def detect_objects(request: ObjectDetectionRequest) -> ObjectDetectionResp
                     )
                     detections.append(detection)
 
-            # Compute hashes
+            # Compute config hash (input hash is provided by caller)
             config = {
                 "model_name": request.model_name,
                 "frame_interval": request.frame_interval,
@@ -156,12 +162,11 @@ async def detect_objects(request: ObjectDetectionRequest) -> ObjectDetectionResp
                 "model_profile": request.model_profile,
             }
             config_hash = compute_config_hash(config)
-            input_hash = compute_input_hash(request.video_path)
 
             return ObjectDetectionResponse(
                 run_id=str(uuid.uuid4()),
                 config_hash=config_hash,
-                input_hash=input_hash,
+                input_hash=request.input_hash,
                 model_profile=request.model_profile,
                 producer="yolo",
                 producer_version="8.0.0",
@@ -184,6 +189,9 @@ async def detect_faces(request: FaceDetectionRequest) -> FaceDetectionResponse:
         FaceDetectionResponse with detections and provenance metadata
     """
     try:
+        # Validate input (checks file exists and hash matches)
+        validate_inference_input(request.video_path, request.input_hash)
+
         async with await _acquire_gpu_if_available():
             from ultralytics import YOLO
 
@@ -224,19 +232,18 @@ async def detect_faces(request: FaceDetectionRequest) -> FaceDetectionResponse:
                     )
                     detections.append(detection)
 
-            # Compute hashes
+            # Compute config hash (input hash is provided by caller)
             config = {
                 "model_name": request.model_name,
                 "frame_interval": request.frame_interval,
                 "confidence_threshold": request.confidence_threshold,
             }
             config_hash = compute_config_hash(config)
-            input_hash = compute_input_hash(request.video_path)
 
             return FaceDetectionResponse(
                 run_id=str(uuid.uuid4()),
                 config_hash=config_hash,
-                input_hash=input_hash,
+                input_hash=request.input_hash,
                 producer="yolo",
                 producer_version="8.0.0",
                 detections=detections,
@@ -258,6 +265,9 @@ async def transcribe_video(request: TranscriptionRequest) -> TranscriptionRespon
         TranscriptionResponse with segments and provenance metadata
     """
     try:
+        # Validate input (checks file exists and hash matches)
+        validate_inference_input(request.video_path, request.input_hash)
+
         async with await _acquire_gpu_if_available():
             from faster_whisper import WhisperModel
 
@@ -265,9 +275,7 @@ async def transcribe_video(request: TranscriptionRequest) -> TranscriptionRespon
             logger.info(f"Transcription: {request.video_path} (device: {device})")
 
             # Load model with explicit device
-            model = WhisperModel(
-                request.model_name, device=device, compute_type="auto"
-            )
+            model = WhisperModel(request.model_name, device=device, compute_type="auto")
 
             # Run inference
             segments, info = model.transcribe(
@@ -283,24 +291,23 @@ async def transcribe_video(request: TranscriptionRequest) -> TranscriptionRespon
                     start_ms=int(segment.start * 1000),
                     end_ms=int(segment.end * 1000),
                     text=segment.text,
-                    confidence=None,  # faster_whisper doesn't provide segment confidence
+                    confidence=None,  # faster_whisper doesn't provide confidence
                     words=None,
                 )
                 transcription_segments.append(ts)
 
-            # Compute hashes
+            # Compute config hash (input hash is provided by caller)
             config = {
                 "model_name": request.model_name,
                 "language": request.language,
                 "vad_filter": request.vad_filter,
             }
             config_hash = compute_config_hash(config)
-            input_hash = compute_input_hash(request.video_path)
 
             return TranscriptionResponse(
                 run_id=str(uuid.uuid4()),
                 config_hash=config_hash,
-                input_hash=input_hash,
+                input_hash=request.input_hash,
                 language=info.language,
                 producer="whisper",
                 producer_version="3.0",
@@ -323,6 +330,9 @@ async def extract_ocr(request: OCRRequest) -> OCRResponse:
         OCRResponse with detections and provenance metadata
     """
     try:
+        # Validate input (checks file exists and hash matches)
+        validate_inference_input(request.video_path, request.input_hash)
+
         async with await _acquire_gpu_if_available():
             import cv2
             import easyocr
@@ -330,9 +340,7 @@ async def extract_ocr(request: OCRRequest) -> OCRResponse:
             logger.info(f"OCR: {request.video_path} (GPU: {GPU_AVAILABLE})")
 
             # Load model with explicit GPU flag
-            reader = easyocr.Reader(
-                request.languages, gpu=GPU_AVAILABLE, verbose=False
-            )
+            reader = easyocr.Reader(request.languages, gpu=GPU_AVAILABLE, verbose=False)
 
             # Open video
             cap = cv2.VideoCapture(request.video_path)
@@ -348,9 +356,7 @@ async def extract_ocr(request: OCRRequest) -> OCRResponse:
                 if frame_count % request.frame_interval == 0:
                     results = reader.readtext(frame)
 
-                    timestamp_ms = int(
-                        (frame_count / cap.get(cv2.CAP_PROP_FPS)) * 1000
-                    )
+                    timestamp_ms = int((frame_count / cap.get(cv2.CAP_PROP_FPS)) * 1000)
 
                     for result in results:
                         bbox, text, confidence = result
@@ -359,7 +365,9 @@ async def extract_ocr(request: OCRRequest) -> OCRResponse:
                             timestamp_ms=timestamp_ms,
                             text=text,
                             confidence=confidence,
-                            polygon=[{"x": float(p[0]), "y": float(p[1])} for p in bbox],
+                            polygon=[
+                                {"x": float(p[0]), "y": float(p[1])} for p in bbox
+                            ],
                         )
                         detections.append(detection)
 
@@ -367,19 +375,18 @@ async def extract_ocr(request: OCRRequest) -> OCRResponse:
 
             cap.release()
 
-            # Compute hashes
+            # Compute config hash (input hash is provided by caller)
             config = {
                 "frame_interval": request.frame_interval,
                 "languages": request.languages,
                 "use_gpu": request.use_gpu,
             }
             config_hash = compute_config_hash(config)
-            input_hash = compute_input_hash(request.video_path)
 
             return OCRResponse(
                 run_id=str(uuid.uuid4()),
                 config_hash=config_hash,
-                input_hash=input_hash,
+                input_hash=request.input_hash,
                 producer="easyocr",
                 producer_version="1.7.0",
                 detections=detections,
@@ -401,6 +408,9 @@ async def classify_places(request: PlaceDetectionRequest) -> PlaceDetectionRespo
         PlaceDetectionResponse with classifications and provenance metadata
     """
     try:
+        # Validate input (checks file exists and hash matches)
+        validate_inference_input(request.video_path, request.input_hash)
+
         async with await _acquire_gpu_if_available():
             device = _get_device()
             logger.info(f"Place detection: {request.video_path} (device: {device})")
@@ -408,18 +418,17 @@ async def classify_places(request: PlaceDetectionRequest) -> PlaceDetectionRespo
             # Placeholder implementation
             classifications = []
 
-            # Compute hashes
+            # Compute config hash (input hash is provided by caller)
             config = {
                 "frame_interval": request.frame_interval,
                 "top_k": request.top_k,
             }
             config_hash = compute_config_hash(config)
-            input_hash = compute_input_hash(request.video_path)
 
             return PlaceDetectionResponse(
                 run_id=str(uuid.uuid4()),
                 config_hash=config_hash,
-                input_hash=input_hash,
+                input_hash=request.input_hash,
                 producer="places365",
                 producer_version="1.0.0",
                 classifications=classifications,
@@ -441,6 +450,9 @@ async def detect_scenes(request: SceneDetectionRequest) -> SceneDetectionRespons
         SceneDetectionResponse with scenes and provenance metadata
     """
     try:
+        # Validate input (checks file exists and hash matches)
+        validate_inference_input(request.video_path, request.input_hash)
+
         async with await _acquire_gpu_if_available():
             device = _get_device()
             logger.info(f"Scene detection: {request.video_path} (device: {device})")
@@ -448,18 +460,17 @@ async def detect_scenes(request: SceneDetectionRequest) -> SceneDetectionRespons
             # Placeholder implementation
             scenes = []
 
-            # Compute hashes
+            # Compute config hash (input hash is provided by caller)
             config = {
                 "threshold": request.threshold,
                 "min_scene_length": request.min_scene_length,
             }
             config_hash = compute_config_hash(config)
-            input_hash = compute_input_hash(request.video_path)
 
             return SceneDetectionResponse(
                 run_id=str(uuid.uuid4()),
                 config_hash=config_hash,
-                input_hash=input_hash,
+                input_hash=request.input_hash,
                 producer="scenedetect",
                 producer_version="0.6.0",
                 scenes=scenes,

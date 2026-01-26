@@ -1,7 +1,6 @@
 """Model manager for downloading and verifying ML models."""
 
 import logging
-import os
 from pathlib import Path
 
 import torch
@@ -66,10 +65,8 @@ class ModelManager:
                 import easyocr
 
                 # EasyOCR caches to ~/.EasyOCR by default
-                reader = easyocr.Reader(
-                    ["en"], gpu=self.gpu_available, verbose=False
-                )
-                logger.info(f"✓ EasyOCR model downloaded")
+                easyocr.Reader(["en"], gpu=self.gpu_available, verbose=False)
+                logger.info("✓ EasyOCR model downloaded")
                 return Path("easyocr")
 
             elif model_type == "places365":
@@ -108,24 +105,20 @@ class ModelManager:
                 import numpy as np
 
                 dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
-                results = model(dummy_image, verbose=False)
+                model(dummy_image, verbose=False)
                 logger.info(f"✓ YOLO model {model_name} verified")
 
             elif model_type == "whisper":
                 from faster_whisper import WhisperModel
 
-                model = WhisperModel(
-                    model_name, device=self._get_device(), compute_type="auto"
-                )
+                WhisperModel(model_name, device=self._get_device(), compute_type="auto")
                 logger.info(f"✓ Whisper model {model_name} verified")
 
             elif model_type == "easyocr":
                 import easyocr
 
-                reader = easyocr.Reader(
-                    ["en"], gpu=self.gpu_available, verbose=False
-                )
-                logger.info(f"✓ EasyOCR model verified")
+                easyocr.Reader(["en"], gpu=self.gpu_available, verbose=False)
+                logger.info("✓ EasyOCR model verified")
 
             elif model_type == "places365":
                 import torchvision.models as models
@@ -133,14 +126,14 @@ class ModelManager:
                 model = models.resnet18(pretrained=False)
                 model.to(self._get_device())
                 model.eval()
-                logger.info(f"✓ Places365 model verified")
+                logger.info("✓ Places365 model verified")
 
             # Log GPU detection result
             if self.gpu_available:
                 device_name = torch.cuda.get_device_name(0)
                 logger.info(f"  GPU detected: {device_name}")
             else:
-                logger.info(f"  GPU not available, using CPU")
+                logger.info("  GPU not available, using CPU")
 
             return True
 

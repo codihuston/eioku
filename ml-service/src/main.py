@@ -12,9 +12,9 @@ from pythonjsonlogger import jsonlogger
 class JsonFormatter(jsonlogger.JsonFormatter):
     def add_fields(self, log_record, record, message_dict):
         super().add_fields(log_record, record, message_dict)
-        log_record['level'] = record.levelname.lower()
-        log_record['name'] = record.name
-        log_record['service'] = 'ml-service'
+        log_record["level"] = record.levelname.lower()
+        log_record["name"] = record.name
+        log_record["service"] = "ml-service"
 
 
 def setup_logging():
@@ -63,15 +63,13 @@ def setup_logging():
 setup_logging()
 
 # Now import everything else that might use logging
-import asyncio
+import asyncio  # noqa: E402
 
-import torch
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from .api import health, inference
-from .services.model_manager import ModelManager
-
+from .api import health, inference  # noqa: E402
+from .services.model_manager import ModelManager  # noqa: E402
 
 # Get a logger instance for this module
 logger = logging.getLogger(__name__)
@@ -117,11 +115,10 @@ async def lifespan(app: FastAPI):
         else:
             if require_gpu:
                 raise RuntimeError(
-                    "GPU required but not available (set REQUIRE_GPU=false to allow CPU-only mode)"
+                    "GPU required but not available "
+                    "(set REQUIRE_GPU=false to allow CPU-only mode)"
                 )
-            logger.warning(
-                "GPU not available - will use CPU for inference (slower)"
-            )
+            logger.warning("GPU not available - will use CPU for inference (slower)")
 
         # Define models to initialize
         models_to_init = [
@@ -134,7 +131,9 @@ async def lifespan(app: FastAPI):
         # Initialize models
         for model_name, model_type, description in models_to_init:
             try:
-                logger.info(f"[{description}] Initializing {model_type} model: {model_name}")
+                logger.info(
+                    f"[{description}] Initializing {model_type} model: {model_name}"
+                )
                 await MODEL_MANAGER.download_model(model_name, model_type)
                 await MODEL_MANAGER.verify_model(model_name, model_type)
                 MODELS_REGISTRY[model_name] = {
@@ -144,7 +143,9 @@ async def lifespan(app: FastAPI):
                 }
                 logger.info(f"✓ [{description}] {model_name} initialized successfully")
             except Exception as e:
-                logger.error(f"✗ [{description}] Failed to initialize {model_name}: {e}")
+                logger.error(
+                    f"✗ [{description}] Failed to initialize {model_name}: {e}"
+                )
                 MODELS_REGISTRY[model_name] = {
                     "status": "failed",
                     "type": model_type,

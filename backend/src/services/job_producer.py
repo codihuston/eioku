@@ -163,6 +163,7 @@ class JobProducer:
         task_type: str,
         video_id: str,
         video_path: str,
+        input_hash: str,
         config: dict | None = None,
     ) -> str:
         """Enqueue a job to the ml_jobs queue for ML Service processing.
@@ -176,6 +177,7 @@ class JobProducer:
             task_type: Type of task (e.g., 'object_detection')
             video_id: Video identifier
             video_path: Path to video file
+            input_hash: xxhash64 of video file (from discovery service)
             config: Optional task configuration
 
         Returns:
@@ -200,6 +202,7 @@ class JobProducer:
             "task_type": task_type,
             "video_id": video_id,
             "video_path": video_path,
+            "input_hash": input_hash,
             "config": config or {},
         }
 

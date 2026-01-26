@@ -34,7 +34,9 @@ class Segment(BaseModel):
     start_ms: int = Field(..., description="Start time in milliseconds")
     end_ms: int = Field(..., description="End time in milliseconds")
     text: str = Field(..., description="Segment text")
-    confidence: float | None = Field(default=None, ge=0, le=1, description="Confidence score (if available)")
+    confidence: float | None = Field(
+        default=None, ge=0, le=1, description="Confidence score (if available)"
+    )
     words: list[dict] | None = Field(default=None, description="Word-level details")
 
 
@@ -144,9 +146,13 @@ class SceneDetectionResponse(BaseModel):
 class HealthResponse(BaseModel):
     """Response model for health check."""
 
-    status: str = Field(..., description="Service status (healthy, degraded, unhealthy)")
+    status: str = Field(
+        ..., description="Service status (healthy, degraded, unhealthy)"
+    )
     models_loaded: list[str] = Field(..., description="List of loaded models")
     gpu_available: bool = Field(..., description="GPU availability")
     gpu_device_name: str | None = Field(default=None, description="GPU device name")
-    gpu_memory_total_mb: int | None = Field(default=None, description="Total GPU memory")
+    gpu_memory_total_mb: int | None = Field(
+        default=None, description="Total GPU memory"
+    )
     gpu_memory_used_mb: int | None = Field(default=None, description="Used GPU memory")

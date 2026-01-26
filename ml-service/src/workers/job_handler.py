@@ -30,6 +30,7 @@ async def process_inference_job(
     task_type: str,
     video_id: str,
     video_path: str,
+    input_hash: str,
     config: dict | None = None,
 ) -> dict:
     """Process an ML inference job from the ml_jobs queue.
@@ -42,6 +43,7 @@ async def process_inference_job(
     - task_type: Type of task (e.g., 'object_detection')
     - video_id: Video identifier
     - video_path: Path to video file
+    - input_hash: xxhash64 of video file (from discovery service)
     - config: Task configuration (optional)
 
     Args:
@@ -49,6 +51,7 @@ async def process_inference_job(
         task_type: Type of task (e.g., 'object_detection')
         video_id: Video identifier
         video_path: Path to video file
+        input_hash: xxhash64 of video file
         config: Optional task configuration
 
     Returns:
@@ -77,6 +80,7 @@ async def process_inference_job(
         ml_response = await _execute_inference(
             task_type=task_type,
             video_path=video_path,
+            input_hash=input_hash,
             config=config,
         )
 
@@ -128,6 +132,7 @@ async def process_inference_job(
 async def _execute_inference(
     task_type: str,
     video_path: str,
+    input_hash: str,
     config: dict,
 ) -> dict:
     """Execute ML inference for the given task type.
@@ -140,6 +145,7 @@ async def _execute_inference(
     Args:
         task_type: Type of task (e.g., 'object_detection')
         video_path: Path to video file
+        input_hash: xxhash64 of video file
         config: Task configuration
 
     Returns:
@@ -164,6 +170,7 @@ async def _execute_inference(
 
         request = ObjectDetectionRequest(
             video_path=video_path,
+            input_hash=input_hash,
             model_name=config.get("model_name", "yolov8n.pt"),
             frame_interval=config.get("frame_interval", 30),
             confidence_threshold=config.get("confidence_threshold", 0.5),
@@ -176,6 +183,7 @@ async def _execute_inference(
 
         request = FaceDetectionRequest(
             video_path=video_path,
+            input_hash=input_hash,
             model_name=config.get("model_name", "yolov8n-face.pt"),
             frame_interval=config.get("frame_interval", 30),
             confidence_threshold=config.get("confidence_threshold", 0.5),
@@ -187,6 +195,7 @@ async def _execute_inference(
 
         request = TranscriptionRequest(
             video_path=video_path,
+            input_hash=input_hash,
             model_name=config.get("model_name", "large-v3"),
             language=config.get("language"),
             vad_filter=config.get("vad_filter", True),
@@ -198,6 +207,7 @@ async def _execute_inference(
 
         request = OCRRequest(
             video_path=video_path,
+            input_hash=input_hash,
             frame_interval=config.get("frame_interval", 60),
             languages=config.get("languages", ["en"]),
             use_gpu=config.get("use_gpu", True),
@@ -209,6 +219,7 @@ async def _execute_inference(
 
         request = PlaceDetectionRequest(
             video_path=video_path,
+            input_hash=input_hash,
             frame_interval=config.get("frame_interval", 60),
             top_k=config.get("top_k", 5),
         )
@@ -219,6 +230,7 @@ async def _execute_inference(
 
         request = SceneDetectionRequest(
             video_path=video_path,
+            input_hash=input_hash,
             threshold=config.get("threshold", 0.4),
             min_scene_length=config.get("min_scene_length", 0.6),
         )
