@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Principal Software Engineer Code Review",
+  "description": "Automatically review code changes using principal software engineer perspective before committing",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "You are a principal software engineer. Review the code changes using the perspective from .kiro/prompts/principal-software-engineer.agent.md.\n\nAnalyze the changes for:\n- Architectural soundness and design patterns\n- Error handling and resilience patterns\n- Code quality and maintainability\n- Testing strategy and coverage\n- Integration with existing architecture\n- Potential issues or improvements\n- Technical debt or future considerations\n\nProvide specific, actionable feedback with improvement recommendations. Identify any critical issues that must be fixed before merging. Suggest GitHub issues for technical debt."
+  }
+}

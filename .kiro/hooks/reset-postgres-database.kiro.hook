@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Reset PostgreSQL Database",
+  "description": "Stops services, removes postgres and valkey volumes (preserves ml_models), and restarts",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd dev && ./stop && docker volume rm dev_postgres_data dev_valkey_data && ./start"
+  }
+}
+
+
+
