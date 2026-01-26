@@ -80,20 +80,21 @@ def setup_logging():
 setup_logging()
 
 # Now import everything else that might use logging
-from fastapi import FastAPI
+from fastapi import FastAPI  # noqa: E402
 
-from src.api.artifact_controller import router as artifact_router
-from src.api.path_controller_full import router as path_router
-from src.api.task_routes import router as task_router
-from src.api.video_controller import router as video_router
-from src.database.connection import get_db
-from src.database.migrations import run_migrations
-from src.repositories.path_config_repository import SQLAlchemyPathConfigRepository
-from src.services.config_loader import ConfigLoader
-from src.services.job_producer import JobProducer
-from src.services.path_config_manager import PathConfigManager
-from src.services.video_discovery_service import VideoDiscoveryService
-
+from src.api.artifact_controller import router as artifact_router  # noqa: E402
+from src.api.path_controller_full import router as path_router  # noqa: E402
+from src.api.task_routes import router as task_router  # noqa: E402
+from src.api.video_controller import router as video_router  # noqa: E402
+from src.database.connection import get_db  # noqa: E402
+from src.database.migrations import run_migrations  # noqa: E402
+from src.repositories.path_config_repository import (  # noqa: E402
+    SQLAlchemyPathConfigRepository,
+)
+from src.services.config_loader import ConfigLoader  # noqa: E402
+from src.services.job_producer import JobProducer  # noqa: E402
+from src.services.path_config_manager import PathConfigManager  # noqa: E402
+from src.services.video_discovery_service import VideoDiscoveryService  # noqa: E402
 
 # Get a logger instance for this module
 logger = logging.getLogger(__name__)

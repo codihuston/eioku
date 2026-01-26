@@ -106,15 +106,18 @@ async def process_ml_task(
         await job_producer.initialize()
         try:
             # Get video record to retrieve the file hash
-            video = self.video_repository.find_by_id(video_id)
+            from ..repositories.video_repository import VideoRepository
+
+            video_repo = VideoRepository(session)
+            video = video_repo.find_by_id(video_id)
             if not video:
                 raise ValueError(f"Video not found: {video_id}")
-            
+
             input_hash = video.file_hash
             if not input_hash:
                 logger.warning(f"Video {video_id} has no file_hash, using empty string")
                 input_hash = ""
-            
+
             job_id = await job_producer.enqueue_to_ml_jobs(
                 task_id=task_id,
                 task_type=task_type,

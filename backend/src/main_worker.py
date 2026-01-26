@@ -74,12 +74,12 @@ def setup_logging():
 setup_logging()
 
 # Now import everything else that might use logging
-from src.config.redis_config import get_redis_settings
-from src.database.connection import get_db
-from src.repositories.artifact_repository import SqlArtifactRepository
-from src.repositories.task_repository import SQLAlchemyTaskRepository
-from src.workers.reconciler import Reconciler
-from src.workers.task_handler import process_ml_task
+from src.config.redis_config import get_redis_settings  # noqa: E402
+from src.database.connection import get_db  # noqa: E402
+from src.repositories.artifact_repository import SqlArtifactRepository  # noqa: E402
+from src.repositories.task_repository import SQLAlchemyTaskRepository  # noqa: E402
+from src.workers.reconciler import Reconciler  # noqa: E402
+from src.workers.task_handler import process_ml_task  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
