@@ -386,7 +386,10 @@ async def list_tasks(
         if sort_by not in valid_sort_fields:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid sort_by. Must be one of: {', '.join(valid_sort_fields)}",
+                detail=(
+                    f"Invalid sort_by. Must be one of: "
+                    f"{', '.join(valid_sort_fields)}"
+                ),
             )
 
         if sort_order not in ("asc", "desc"):

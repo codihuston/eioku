@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -34,15 +35,23 @@ def test_database_migrations_run_on_startup():
         os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
 
         try:
-            # Create test client with lifespan events enabled
-            with TestClient(app) as client:
-                # Verify the app responds
-                response = client.get("/health")
-                assert response.status_code == 200
-                assert response.json() == {"status": "healthy"}
+            # Mock the Redis connection to avoid timeout
+            with patch("src.services.job_producer.create_pool") as mock_create_pool:
+                # Create a mock pool
+                mock_pool = AsyncMock()
+                mock_pool.ping = AsyncMock()
+                mock_pool.close = AsyncMock()
+                mock_create_pool.return_value = mock_pool
 
-                # Verify the database file was created
-                assert os.path.exists(test_db_path)
+                # Create test client with lifespan events enabled
+                with TestClient(app) as client:
+                    # Verify the app responds
+                    response = client.get("/health")
+                    assert response.status_code == 200
+                    assert response.json() == {"status": "healthy", "service": "api"}
+
+                    # Verify the database file was created
+                    assert os.path.exists(test_db_path)
 
         finally:
             # Clean up environment
