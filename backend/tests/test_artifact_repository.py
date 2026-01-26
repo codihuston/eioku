@@ -63,7 +63,7 @@ def test_video(session):
 @pytest.fixture
 def sample_artifact(test_video):
     """Create a sample artifact envelope."""
-    payload = {"text": "Hello world", "confidence": 0.95, "language": "en"}
+    payload = {"text": "Hello world", "start_ms": 0, "end_ms": 1000, "confidence": 0.95}
     return ArtifactEnvelope(
         artifact_id="artifact_1",
         asset_id=test_video.video_id,
@@ -136,7 +136,12 @@ def test_get_by_asset(repository, sample_artifact, test_video):
         span_start_ms=1000,
         span_end_ms=2000,
         payload_json=json.dumps(
-            {"text": "Second segment", "confidence": 0.9, "language": "en"}
+            {
+                "text": "Second segment",
+                "start_ms": 1000,
+                "end_ms": 2000,
+                "confidence": 0.9,
+            }
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -168,7 +173,7 @@ def test_get_by_asset_with_type_filter(repository, sample_artifact, test_video):
         span_start_ms=0,
         span_end_ms=5000,
         payload_json=json.dumps(
-            {"scene_index": 1, "method": "content", "score": 0.8, "frame_number": 0}
+            {"scene_index": 1, "start_ms": 0, "end_ms": 5000, "duration_ms": 5000}
         ),
         producer="pyscenedetect",
         producer_version="0.6.0",
@@ -201,7 +206,12 @@ def test_get_by_asset_with_time_range(repository, sample_artifact, test_video):
         span_start_ms=5000,
         span_end_ms=6000,
         payload_json=json.dumps(
-            {"text": "Later segment", "confidence": 0.9, "language": "en"}
+            {
+                "text": "Later segment",
+                "start_ms": 5000,
+                "end_ms": 6000,
+                "confidence": 0.9,
+            }
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -232,7 +242,12 @@ def test_get_by_span(repository, sample_artifact, test_video):
         span_start_ms=500,
         span_end_ms=1500,
         payload_json=json.dumps(
-            {"text": "Overlapping segment", "confidence": 0.9, "language": "en"}
+            {
+                "text": "Overlapping segment",
+                "start_ms": 500,
+                "end_ms": 1500,
+                "confidence": 0.9,
+            }
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -252,7 +267,12 @@ def test_get_by_span(repository, sample_artifact, test_video):
         span_start_ms=2000,
         span_end_ms=3000,
         payload_json=json.dumps(
-            {"text": "Non-overlapping", "confidence": 0.9, "language": "en"}
+            {
+                "text": "Non-overlapping",
+                "start_ms": 2000,
+                "end_ms": 3000,
+                "confidence": 0.9,
+            }
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -306,7 +326,7 @@ def test_selection_policy_profile(repository, sample_artifact, test_video):
         span_start_ms=0,
         span_end_ms=1000,
         payload_json=json.dumps(
-            {"text": "Fast profile", "confidence": 0.8, "language": "en"}
+            {"text": "Fast profile", "start_ms": 0, "end_ms": 1000, "confidence": 0.8}
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -346,7 +366,9 @@ def test_selection_policy_pinned(repository, sample_artifact, test_video):
         schema_version=1,
         span_start_ms=0,
         span_end_ms=1000,
-        payload_json=json.dumps({"text": "Run 2", "confidence": 0.9, "language": "en"}),
+        payload_json=json.dumps(
+            {"text": "Run 2", "start_ms": 0, "end_ms": 1000, "confidence": 0.9}
+        ),
         producer="whisper",
         producer_version="3.0.0",
         model_profile="balanced",
@@ -392,7 +414,7 @@ def test_selection_policy_latest(repository, sample_artifact, test_video):
         span_start_ms=0,
         span_end_ms=1000,
         payload_json=json.dumps(
-            {"text": "Run 2 - latest", "confidence": 0.9, "language": "en"}
+            {"text": "Run 2 - latest", "start_ms": 0, "end_ms": 1000, "confidence": 0.9}
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -432,7 +454,9 @@ def test_selection_policy_default(repository, sample_artifact, test_video):
         schema_version=1,
         span_start_ms=0,
         span_end_ms=1000,
-        payload_json=json.dumps({"text": "Run 2", "confidence": 0.9, "language": "en"}),
+        payload_json=json.dumps(
+            {"text": "Run 2", "start_ms": 0, "end_ms": 1000, "confidence": 0.9}
+        ),
         producer="whisper",
         producer_version="3.0.0",
         model_profile="balanced",
@@ -469,7 +493,7 @@ def test_selection_policy_best_quality(repository, test_video):
         span_start_ms=0,
         span_end_ms=1000,
         payload_json=json.dumps(
-            {"text": "Fast profile", "confidence": 0.8, "language": "en"}
+            {"text": "Fast profile", "start_ms": 0, "end_ms": 1000, "confidence": 0.8}
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -489,7 +513,12 @@ def test_selection_policy_best_quality(repository, test_video):
         span_start_ms=0,
         span_end_ms=1000,
         payload_json=json.dumps(
-            {"text": "Balanced profile", "confidence": 0.9, "language": "en"}
+            {
+                "text": "Balanced profile",
+                "start_ms": 0,
+                "end_ms": 1000,
+                "confidence": 0.9,
+            }
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -509,7 +538,12 @@ def test_selection_policy_best_quality(repository, test_video):
         span_start_ms=0,
         span_end_ms=1000,
         payload_json=json.dumps(
-            {"text": "High quality profile", "confidence": 0.95, "language": "en"}
+            {
+                "text": "High quality profile",
+                "start_ms": 0,
+                "end_ms": 1000,
+                "confidence": 0.95,
+            }
         ),
         producer="whisper",
         producer_version="3.0.0",
@@ -548,7 +582,9 @@ def test_get_by_span_with_selection_policy(repository, test_video):
         schema_version=1,
         span_start_ms=0,
         span_end_ms=1000,
-        payload_json=json.dumps({"text": "Run 1", "confidence": 0.9, "language": "en"}),
+        payload_json=json.dumps(
+            {"text": "Run 1", "start_ms": 0, "end_ms": 1000, "confidence": 0.9}
+        ),
         producer="whisper",
         producer_version="3.0.0",
         model_profile="balanced",
@@ -566,7 +602,9 @@ def test_get_by_span_with_selection_policy(repository, test_video):
         schema_version=1,
         span_start_ms=500,
         span_end_ms=1500,
-        payload_json=json.dumps({"text": "Run 2", "confidence": 0.9, "language": "en"}),
+        payload_json=json.dumps(
+            {"text": "Run 2", "start_ms": 500, "end_ms": 1500, "confidence": 0.9}
+        ),
         producer="whisper",
         producer_version="3.0.0",
         model_profile="fast",

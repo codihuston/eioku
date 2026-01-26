@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine
@@ -43,8 +44,11 @@ def schema_registry():
 
 @pytest.fixture
 def artifact_repo(session, schema_registry):
-    """Create artifact repository instance."""
-    return SqlArtifactRepository(session, schema_registry)
+    """Create artifact repository instance with mocked projection sync."""
+    # Mock the projection sync service to avoid FTS table errors
+    mock_projection_sync = MagicMock()
+    mock_projection_sync.sync_artifact = MagicMock()
+    return SqlArtifactRepository(session, schema_registry, mock_projection_sync)
 
 
 @pytest.fixture
@@ -78,7 +82,12 @@ def create_transcript_artifact(
     artifact_id, asset_id, start_ms, end_ms, text, confidence=0.9, run_id="run_1"
 ):
     """Helper to create transcript artifact."""
-    payload = {"text": text, "confidence": confidence, "language": "en"}
+    payload = {
+        "text": text,
+        "start_ms": start_ms,
+        "end_ms": end_ms,
+        "confidence": confidence,
+    }
     return ArtifactEnvelope(
         artifact_id=artifact_id,
         asset_id=asset_id,
@@ -173,9 +182,9 @@ def create_scene_artifact(
     """Helper to create scene artifact."""
     payload = {
         "scene_index": scene_index,
-        "method": "content",
-        "score": 0.8,
-        "frame_number": scene_index * 100,
+        "start_ms": start_ms,
+        "end_ms": end_ms,
+        "duration_ms": end_ms - start_ms,
     }
     return ArtifactEnvelope(
         artifact_id=artifact_id,

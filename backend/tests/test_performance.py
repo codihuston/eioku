@@ -102,9 +102,9 @@ class TestPerformance:
 
             payload = TranscriptSegmentV1(
                 text=f"Segment {i} text content",
-                speaker=None,
+                start_ms=start_ms,
+                end_ms=end_ms,
                 confidence=0.95,
-                language="en",
             )
 
             artifact = ArtifactEnvelope(
@@ -151,9 +151,9 @@ class TestPerformance:
         for i in range(num_artifacts):
             payload = SceneV1(
                 scene_index=i,
-                method="content",
-                score=0.85,
-                frame_number=i * 100,
+                start_ms=i * 10000,
+                end_ms=(i + 1) * 10000,
+                duration_ms=10000,
             )
 
             artifact = ArtifactEnvelope(
@@ -289,9 +289,9 @@ class TestPerformance:
             for i in range(artifacts_per_profile):
                 payload = TranscriptSegmentV1(
                     text=f"Text from {profile} model segment {i}",
-                    speaker=None,
+                    start_ms=i * 1000,
+                    end_ms=(i + 1) * 1000,
                     confidence=0.9,
-                    language="en",
                 )
 
                 artifact = ArtifactEnvelope(

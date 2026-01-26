@@ -1,5 +1,6 @@
 import os
 import tempfile
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -48,8 +49,14 @@ def client(test_db):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
-        yield test_client
+    # Mock the job producer to avoid Redis connection
+    mock_job_producer = AsyncMock()
+    mock_job_producer.initialize = AsyncMock()
+    mock_job_producer.close = AsyncMock()
+
+    with patch("src.main_api.JobProducer", return_value=mock_job_producer):
+        with TestClient(app) as test_client:
+            yield test_client
 
     app.dependency_overrides.clear()
 

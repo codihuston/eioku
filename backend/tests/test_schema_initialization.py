@@ -62,9 +62,9 @@ class TestSchemaInitialization:
         # Test scene
         scene_payload = {
             "scene_index": 0,
-            "method": "content",
-            "score": 0.85,
-            "frame_number": 120,
+            "start_ms": 0,
+            "end_ms": 5000,
+            "duration_ms": 5000,
         }
         validated = SchemaRegistry.validate("scene", 1, scene_payload)
         assert validated.scene_index == 0

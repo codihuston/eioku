@@ -5,6 +5,7 @@ from src.domain.schemas import (
     FaceDetectionV1,
     ObjectDetectionV1,
     OCRDetectionV1,
+    OcrTextV1,
     PlaceClassificationV1,
     SceneV1,
     TranscriptSegmentV1,
@@ -44,3 +45,7 @@ def register_all_schemas() -> None:
     # Register ocr.detection schemas
     if not SchemaRegistry.is_registered("ocr.detection", 1):
         SchemaRegistry.register("ocr.detection", 1, OCRDetectionV1)
+
+    # Register ocr.text schemas
+    if not SchemaRegistry.is_registered("ocr.text", 1):
+        SchemaRegistry.register("ocr.text", 1, OcrTextV1)

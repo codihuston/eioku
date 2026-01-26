@@ -66,7 +66,7 @@ class JumpNavigationService:
             or self.policy_manager.get_default_policy(asset_id, artifact_type)
         )
 
-        # Get artifacts starting AFTER the given timestamp
+        # Get artifacts starting AT or AFTER the given timestamp
         # We need to query all artifacts and filter manually since the repo
         # uses >= instead of > for start_ms
         artifacts = self.artifact_repo.get_by_asset(
@@ -75,8 +75,8 @@ class JumpNavigationService:
             selection=policy,
         )
 
-        # Filter to only artifacts that start after from_ms
-        artifacts = [a for a in artifacts if a.span_start_ms > from_ms]
+        # Filter to only artifacts that start at or after from_ms
+        artifacts = [a for a in artifacts if a.span_start_ms >= from_ms]
 
         # Filter by label/cluster if specified
         filtered = self._filter_artifacts(artifacts, label, cluster_id, min_confidence)

@@ -148,7 +148,12 @@ def create_transcript_artifact(
     artifact_id, asset_id, start_ms, end_ms, text, confidence=0.9, run_id="run_1"
 ):
     """Helper to create transcript artifact."""
-    payload = {"text": text, "confidence": confidence, "language": "en"}
+    payload = {
+        "text": text,
+        "start_ms": start_ms,
+        "end_ms": end_ms,
+        "confidence": confidence,
+    }
     return ArtifactEnvelope(
         artifact_id=artifact_id,
         asset_id=asset_id,
