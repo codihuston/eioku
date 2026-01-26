@@ -3,7 +3,7 @@
 # The JSON formatting is handled by the application itself.
 
 bind = "0.0.0.0:8000"
-workers = 2
+workers = 1
 worker_class = "uvicorn.workers.UvicornWorker"
 
 # Send Gunicorn's access and error logs to stdout and stderr
