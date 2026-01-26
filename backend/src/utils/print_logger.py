@@ -1,38 +1,19 @@
-"""Print-based logger adapter for debugging when standard logging doesn't work."""
+"""Logger adapter that uses standard Python logging with JSON formatting."""
+
+import logging
 
 
-class PrintLogger:
-    """Logger that uses print() for immediate output visibility."""
-
-    def __init__(self, name: str):
-        self.name = name
-
-    def debug(self, msg: str, *args, **kwargs):
-        """Log debug message."""
-        formatted_msg = msg % args if args else msg
-        print(f"🔍 DEBUG [{self.name}] {formatted_msg}", flush=True)
-
-    def info(self, msg: str, *args, **kwargs):
-        """Log info message."""
-        formatted_msg = msg % args if args else msg
-        print(f"ℹ️  INFO [{self.name}] {formatted_msg}", flush=True)
-
-    def warning(self, msg: str, *args, **kwargs):
-        """Log warning message."""
-        formatted_msg = msg % args if args else msg
-        print(f"⚠️  WARNING [{self.name}] {formatted_msg}", flush=True)
-
-    def error(self, msg: str, *args, **kwargs):
-        """Log error message."""
-        formatted_msg = msg % args if args else msg
-        print(f"❌ ERROR [{self.name}] {formatted_msg}", flush=True)
-
-    def critical(self, msg: str, *args, **kwargs):
-        """Log critical message."""
-        formatted_msg = msg % args if args else msg
-        print(f"🚨 CRITICAL [{self.name}] {formatted_msg}", flush=True)
-
-
-def get_logger(name: str) -> PrintLogger:
-    """Get a print-based logger instance."""
-    return PrintLogger(name)
+def get_logger(name: str) -> logging.Logger:
+    """Get a standard Python logger instance.
+    
+    This function returns a standard logging.Logger that will use the JSON
+    formatter configured in main_api.py and main_worker.py. All logs will be
+    structured as JSON for better log aggregation and parsing.
+    
+    Args:
+        name: Logger name (typically __name__)
+        
+    Returns:
+        logging.Logger instance configured with JSON formatting
+    """
+    return logging.getLogger(name)

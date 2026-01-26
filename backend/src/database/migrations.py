@@ -30,9 +30,9 @@ def run_migrations():
 
         # Run migrations
         db_type = "PostgreSQL" if database_url.startswith("postgresql") else "SQLite"
-        print(f"🔧 Running alembic migrations ({db_type})...")
+        logger.info(f"Running alembic migrations ({db_type})...")
         command.upgrade(alembic_cfg, "head")
-        print("🔧 Alembic upgrade completed")
+        logger.info("Alembic upgrade completed")
 
         logger.info("Database migrations completed successfully")
 

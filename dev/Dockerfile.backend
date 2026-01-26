@@ -2,40 +2,40 @@
 # Stage 1: Copy ffmpeg from pre-built image
 FROM jrottenberg/ffmpeg:8-ubuntu as ffmpeg-builder
 
-# Stage 2: Build with Python 3.10 on Ubuntu (compatible with ffmpeg)
+# Stage 2: Build with Python 3.10 on Ubuntu
 FROM ubuntu:22.04
 
-# Install Python 3.10, pip, and curl
+# Install Python 3.10, pip, and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3-pip \
     curl \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -s /usr/bin/python3.10 /usr/bin/python
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy ffmpeg binaries from the builder stage
 COPY --from=ffmpeg-builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
 
 # Install Poetry
-RUN python3 -m pip install --no-cache-dir poetry
+RUN pip install poetry
+# Ensure poetry is on PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Configure Poetry to install dependencies into the global site-packages
+ENV POETRY_VIRTUALENVS_CREATE=false
 
 WORKDIR /app
 
-# Copy pyproject.toml and poetry.lock from backend directory
-COPY backend/pyproject.toml backend/poetry.lock backend/README.md ./
+# Copy Poetry dependency files for the backend service
+COPY backend/pyproject.toml backend/poetry.lock ./
 
-# Configure Poetry to create virtualenv in a fixed location
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_CACHE_DIR=/root/.cache/pypoetry
+# Install dependencies
+RUN poetry install --no-root --only main
 
-# Install dependencies with BuildKit cache
-RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --no-root
+# Copy the rest of the application source code
+COPY backend/src /app/src
+COPY backend/alembic /app/alembic
+COPY backend/alembic.ini /app/alembic.ini
 
-# Add venv to PATH
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Source code will be mounted as a volume at runtime
+# The command to run the application will be specified in docker-compose.yml

@@ -22,6 +22,7 @@ pillow = "^10.0"
 arq = "^0.26"
 # Database
 psycopg2-binary = "^2.9.9"
+python-json-logger = "^2.0.7"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"

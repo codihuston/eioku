@@ -1,9 +1,69 @@
 """Eioku ML Service - Stateless ML inference endpoints."""
 
-import asyncio
 import logging
+import logging.config
 import os
 from contextlib import asynccontextmanager
+
+from pythonjsonlogger import jsonlogger
+
+
+# A custom formatter to produce JSON logs
+class JsonFormatter(jsonlogger.JsonFormatter):
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        log_record['level'] = record.levelname.lower()
+        log_record['name'] = record.name
+        log_record['service'] = 'ml-service'
+
+
+def setup_logging():
+    """
+    Set up structured JSON logging for the entire application.
+    This must be called before any other imports to ensure all loggers
+    use JSON formatting from the start.
+    """
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "json": {
+                "()": JsonFormatter,
+                "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
+            },
+        },
+        "handlers": {
+            "json_handler": {
+                "class": "logging.StreamHandler",
+                "formatter": "json",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "root": {
+            "handlers": ["json_handler"],
+            "level": "INFO",
+        },
+        "loggers": {
+            "uvicorn": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+        },
+    }
+    logging.config.dictConfig(log_config)
+
+
+# Set up logging immediately when the module is imported, BEFORE any other imports
+setup_logging()
+
+# Now import everything else that might use logging
+import asyncio
 
 import torch
 from fastapi import FastAPI
@@ -12,12 +72,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api import health, inference
 from .services.model_manager import ModelManager
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+
+# Get a logger instance for this module
 logger = logging.getLogger(__name__)
+
 
 # Global state
 MODELS_REGISTRY = {}

@@ -2,11 +2,85 @@
 
 import argparse
 import logging
+import logging.config
 import sys
 from contextlib import asynccontextmanager
 
+from pythonjsonlogger import jsonlogger
+
+
+# A custom formatter to produce JSON logs
+class JsonFormatter(jsonlogger.JsonFormatter):
+    def add_fields(self, log_record, record, message_dict):
+        super().add_fields(log_record, record, message_dict)
+        log_record["level"] = record.levelname.lower()
+        log_record["name"] = record.name
+        log_record["service"] = "backend"
+
+
+def setup_logging():
+    """
+    Set up structured JSON logging for the entire application.
+    This function configures the root logger, and all other loggers will inherit
+    this configuration. It also explicitly configures third-party loggers like
+    Alembic, Uvicorn, and Gunicorn to use JSON formatting.
+    """
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "json": {
+                "()": JsonFormatter,
+                "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
+            },
+        },
+        "handlers": {
+            "json_handler": {
+                "class": "logging.StreamHandler",
+                "formatter": "json",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "root": {
+            "handlers": ["json_handler"],
+            "level": "INFO",
+        },
+        "loggers": {
+            "alembic": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "alembic.runtime.migration": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "uvicorn": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "uvicorn.access": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+            "gunicorn": {
+                "handlers": ["json_handler"],
+                "level": "INFO",
+                "propagate": False,
+            },
+        },
+    }
+    logging.config.dictConfig(log_config)
+
+
+# Set up logging immediately when the module is imported, BEFORE any other imports
+setup_logging()
+
+# Now import everything else that might use logging
 from fastapi import FastAPI
-from fastapi.logger import logger as fastapi_logger
 
 from src.api.artifact_controller import router as artifact_router
 from src.api.path_controller_full import router as path_router
@@ -19,23 +93,10 @@ from src.services.config_loader import ConfigLoader
 from src.services.job_producer import JobProducer
 from src.services.path_config_manager import PathConfigManager
 from src.services.video_discovery_service import VideoDiscoveryService
-from src.utils.print_logger import get_logger
 
-# Configure logging for gunicorn + uvicorn compatibility
-gunicorn_error_logger = logging.getLogger("gunicorn.error")
-gunicorn_logger = logging.getLogger("gunicorn")
-uvicorn_access_logger = logging.getLogger("uvicorn.access")
-uvicorn_access_logger.handlers = gunicorn_error_logger.handlers
 
-fastapi_logger.handlers = gunicorn_error_logger.handlers
-
-if __name__ != "__main__":
-    fastapi_logger.setLevel(gunicorn_logger.level)
-else:
-    fastapi_logger.setLevel(logging.DEBUG)
-
-# Use print logger for startup
-logger = get_logger(__name__)
+# Get a logger instance for this module
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -158,15 +219,11 @@ def create_app(config_path: str | None = None) -> FastAPI:
         app.state.config_path = config_path
 
     # Include routers
-    fastapi_logger.info("Including video router...")
     app.include_router(video_router, prefix="/v1")
-    fastapi_logger.info("Including artifact router...")
     app.include_router(artifact_router, prefix="/v1")
-    fastapi_logger.info("Including path router...")
     app.include_router(path_router, prefix="/v1")
-    fastapi_logger.info("Including task router...")
     app.include_router(task_router, prefix="/v1")
-    fastapi_logger.info("Routers included successfully")
+    logger.info("Routers included successfully")
 
     return app
 
