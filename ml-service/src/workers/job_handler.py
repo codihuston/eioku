@@ -3,14 +3,15 @@
 This module implements the process_inference_job() handler that:
 1. Reads job payload (task_id, task_type, video_id, video_path, config)
 2. Executes appropriate ML inference (object detection, face detection, etc.)
-3. Creates ArtifactEnvelopes with provenance metadata
-4. Batch inserts artifacts to PostgreSQL in single transaction
-5. Acknowledges job in Redis (XACK) on successful completion
-6. Does NOT acknowledge on failure (allows arq to retry)
+3. Publishes results to Redis key for Worker Service to consume
+4. Acknowledges job in Redis (XACK) on successful completion
+5. Does NOT acknowledge on failure (allows arq to retry)
 """
 
 import json
 import logging
+
+import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ async def process_inference_job(
     """Process an ML inference job from the ml_jobs queue.
 
     This handler is called by arq when a job is consumed from the ml_jobs queue.
-    It executes ML inference and persists results to PostgreSQL.
+    It executes ML inference and publishes results to Redis for Worker Service.
 
     The job payload is expected to contain:
     - task_id: Unique task identifier
@@ -55,12 +56,12 @@ async def process_inference_job(
         config: Optional task configuration
 
     Returns:
-        Dictionary with task_id, status, and artifact_count
+        Dictionary with task_id, status, and result_key
 
     Raises:
         ValueError: If task_type is not recognized
         RuntimeError: If inference fails
-        Exception: If database operations fail (job will be retried by arq)
+        Exception: If Redis operations fail (job will be retried by arq)
     """
     if not config:
         config = {}
@@ -74,6 +75,7 @@ async def process_inference_job(
     if task_type not in TASK_TYPE_TO_ENDPOINT:
         raise ValueError(f"Unknown task type: {task_type}")
 
+    redis_client = None
     try:
         # Step 1: Execute ML inference
         logger.info(f"Executing {task_type} inference for task {task_id}")
@@ -89,35 +91,25 @@ async def process_inference_job(
             f"got {len(ml_response.get('detections', []))} detections"
         )
 
-        # Step 2: Transform ML response to ArtifactEnvelopes
-        logger.info(f"Transforming artifacts for task {task_id}")
-        artifacts = _transform_to_artifacts(
-            ml_response=ml_response,
-            task_id=task_id,
-            video_id=video_id,
-            task_type=task_type,
-        )
+        # Step 2: Publish results to Redis for Worker Service
+        import os
 
-        logger.info(f"Transformed {len(artifacts)} artifacts for task {task_id}")
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_client = await redis.from_url(redis_url)
 
-        # Step 3: Batch insert artifacts to PostgreSQL
-        logger.info(f"Persisting {len(artifacts)} artifacts for task {task_id}")
-        artifact_count = await _persist_artifacts(
-            task_id=task_id,
-            video_id=video_id,
-            task_type=task_type,
-            artifacts=artifacts,
-        )
+        result_key = f"ml_result:{task_id}"
+        result_json = json.dumps(ml_response)
 
+        # RPUSH to result key (Worker Service will BLPOP)
+        await redis_client.rpush(result_key, result_json)
         logger.info(
-            f"Successfully persisted {artifact_count} artifacts for task {task_id}"
+            f"Published ML results for task {task_id} to Redis key {result_key}"
         )
 
-        # Step 4: Return success (arq will acknowledge the job)
         return {
             "task_id": task_id,
             "status": "completed",
-            "artifact_count": artifact_count,
+            "result_key": result_key,
         }
 
     except Exception as e:
@@ -127,6 +119,10 @@ async def process_inference_job(
         )
         # Re-raise to allow arq to retry (job will NOT be acknowledged)
         raise
+
+    finally:
+        if redis_client:
+            await redis_client.close()
 
 
 async def _execute_inference(
@@ -241,216 +237,3 @@ async def _execute_inference(
 
     # Convert response to dict for transformation
     return response.model_dump()
-
-
-def _transform_to_artifacts(
-    ml_response: dict,
-    task_id: str,
-    video_id: str,
-    task_type: str,
-) -> list[dict]:
-    """Transform ML response to artifact dictionaries.
-
-    This function extracts individual detections/segments from the ML response
-    and creates artifact dictionaries with provenance metadata.
-
-    Args:
-        ml_response: ML Service response dictionary
-        task_id: Task identifier (for logging)
-        video_id: Video identifier (asset_id)
-        task_type: Type of task
-
-    Returns:
-        List of artifact dictionaries ready for database insertion
-
-    Raises:
-        ValueError: If ml_response is invalid
-    """
-    if not ml_response:
-        raise ValueError("ml_response cannot be empty")
-
-    artifacts = []
-
-    # Extract detections/segments from response
-    detections = ml_response.get("detections", [])
-    if not detections and task_type != "scene_detection":
-        logger.warning(
-            f"No detections found in ML response for task {task_id} ({task_type})"
-        )
-        return []
-
-    # Handle scene detection separately (uses 'scenes' field)
-    if task_type == "scene_detection":
-        detections = ml_response.get("scenes", [])
-
-    # Transform each detection to an artifact
-    for idx, detection in enumerate(detections):
-        try:
-            # Extract time span (in milliseconds)
-            if task_type == "scene_detection":
-                span_start_ms = int(detection.get("start_ms", 0))
-                span_end_ms = int(detection.get("end_ms", 0))
-            else:
-                span_start_ms = int(detection.get("start_ms", 0))
-                span_end_ms = int(detection.get("end_ms", 0))
-
-            # Validate time span
-            if span_start_ms < 0 or span_end_ms < 0:
-                logger.warning(
-                    f"Invalid time span for detection {idx}: "
-                    f"start={span_start_ms}, end={span_end_ms}"
-                )
-                continue
-
-            if span_start_ms > span_end_ms:
-                logger.warning(
-                    f"Invalid time span for detection {idx}: "
-                    f"start > end ({span_start_ms} > {span_end_ms})"
-                )
-                continue
-
-            # Create artifact dictionary
-            artifact = {
-                "task_id": task_id,
-                "video_id": video_id,
-                "task_type": task_type,
-                "span_start_ms": span_start_ms,
-                "span_end_ms": span_end_ms,
-                "payload": detection,
-                "config_hash": ml_response.get("config_hash", ""),
-                "input_hash": ml_response.get("input_hash", ""),
-                "run_id": ml_response.get("run_id", ""),
-                "producer": ml_response.get("producer", "ml-service"),
-                "producer_version": ml_response.get("producer_version", "1.0.0"),
-                "model_profile": ml_response.get("model_profile", "balanced"),
-            }
-
-            artifacts.append(artifact)
-            logger.debug(f"Created artifact {idx} for task {task_id}")
-
-        except (ValueError, KeyError, TypeError) as e:
-            logger.error(f"Error transforming detection {idx} for task {task_id}: {e}")
-            continue
-
-    logger.info(
-        f"Transformed {len(artifacts)} detections to artifacts "
-        f"for task {task_id} ({task_type})"
-    )
-    return artifacts
-
-
-async def _persist_artifacts(
-    task_id: str,
-    video_id: str,
-    task_type: str,
-    artifacts: list[dict],
-) -> int:
-    """Batch insert artifacts to PostgreSQL.
-
-    This function inserts all artifacts for a task in a single transaction.
-    If any insert fails, the entire transaction is rolled back.
-
-    Args:
-        task_id: Task identifier (for logging)
-        video_id: Video identifier
-        task_type: Type of task
-        artifacts: List of artifact dictionaries
-
-    Returns:
-        Number of artifacts inserted
-
-    Raises:
-        RuntimeError: If database operations fail
-    """
-    if not artifacts:
-        logger.info(f"No artifacts to persist for task {task_id}")
-        return 0
-
-    try:
-        # Import database dependencies
-        import os
-        import re
-        from datetime import datetime
-
-        import psycopg2
-
-        # Get database connection string
-        db_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql://eioku:eioku_dev@localhost:5432/eioku",
-        )
-
-        # Parse connection string
-        # Format: postgresql://user:password@host:port/database
-        match = re.match(
-            r"postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)",
-            db_url,
-        )
-        if not match:
-            raise ValueError(f"Invalid DATABASE_URL format: {db_url}")
-
-        user, password, host, port, database = match.groups()
-
-        # Connect to database
-        conn = psycopg2.connect(
-            host=host,
-            port=int(port),
-            database=database,
-            user=user,
-            password=password,
-        )
-
-        try:
-            cursor = conn.cursor()
-
-            # Begin transaction
-            cursor.execute("BEGIN")
-
-            # Insert each artifact
-            for artifact in artifacts:
-                cursor.execute(
-                    """
-                    INSERT INTO artifacts (
-                        task_id, asset_id, artifact_type,
-                        span_start_ms, span_end_ms, payload_json,
-                        config_hash, input_hash, run_id,
-                        producer, producer_version, model_profile,
-                        created_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        artifact["task_id"],
-                        artifact["video_id"],
-                        artifact["task_type"],
-                        artifact["span_start_ms"],
-                        artifact["span_end_ms"],
-                        json.dumps(artifact["payload"]),
-                        artifact["config_hash"],
-                        artifact["input_hash"],
-                        artifact["run_id"],
-                        artifact["producer"],
-                        artifact["producer_version"],
-                        artifact["model_profile"],
-                        datetime.utcnow(),
-                    ),
-                )
-
-            # Commit transaction
-            conn.commit()
-            logger.info(
-                f"Successfully inserted {len(artifacts)} artifacts for task {task_id}"
-            )
-
-            return len(artifacts)
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    except Exception as e:
-        logger.error(
-            f"Error persisting artifacts for task {task_id}: {e}",
-            exc_info=True,
-        )
-        # Re-raise to allow arq to retry
-        raise RuntimeError(f"Failed to persist artifacts for task {task_id}: {e}")
