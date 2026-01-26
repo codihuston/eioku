@@ -20,16 +20,20 @@ RUN pip install poetry
 # Ensure poetry is on PATH
 ENV PATH="/root/.local/bin:$PATH"
 
-# Configure Poetry to install dependencies into the global site-packages
-ENV POETRY_VIRTUALENVS_CREATE=false
+# Configure Poetry to create virtualenvs (needed for dev tools like pytest)
+ENV POETRY_VIRTUALENVS_CREATE=true
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
 
 WORKDIR /app
 
 # Copy Poetry files only (for layer caching)
 COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
 
-# Install dependencies
-RUN poetry install --no-root --only main
+# Install dependencies (including dev tools like ruff, pytest)
+RUN poetry install --no-root
+
+# Add virtualenv to PATH so pytest and other tools are available
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application code
 COPY ml-service/src ./src

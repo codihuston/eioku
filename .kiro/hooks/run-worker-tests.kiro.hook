@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "name": "Run Worker Tests",
+  "description": "Disabled - Worker uses same codebase as backend. Use 'Run Backend Tests' instead.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "echo 'Worker tests consolidated with backend tests. Run backend tests instead.'"
+  }
+}

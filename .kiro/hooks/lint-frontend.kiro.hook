@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Lint Frontend",
+  "description": "Runs ESLint with fix on frontend code using Docker Compose",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "docker compose -f dev/docker-compose.yml exec frontend npm run lint:fix"
+  }
+}

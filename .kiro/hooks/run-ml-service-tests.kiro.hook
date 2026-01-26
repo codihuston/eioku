@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Run ML Service Tests",
+  "description": "Runs pytest on ml-service tests using Docker Compose",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "docker compose -f dev/docker-compose.yml exec ml-service pytest tests/"
+  }
+}

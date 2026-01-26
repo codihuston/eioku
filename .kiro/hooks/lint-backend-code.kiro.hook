@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Lint Backend Code",
+  "description": "Runs Ruff format and check on backend source and test files using Docker Compose",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "docker compose -f dev/docker-compose.yml exec backend sh -c 'poetry run ruff format --check src tests && poetry run ruff check src tests'"
+  }
+}

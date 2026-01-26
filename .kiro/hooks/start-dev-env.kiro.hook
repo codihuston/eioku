@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Start Dev Environment",
+  "description": "Starts the development environment by changing to the dev directory and running the start script",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd dev && ./start"
+  }
+}

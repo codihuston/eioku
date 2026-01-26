@@ -52,6 +52,7 @@ services:
       dockerfile: dev/Dockerfile.backend
     volumes:
       - ../backend/src:/app/src
+      - ../backend/tests:/app/tests
       - ../backend/alembic:/app/alembic
       - ../backend/alembic.ini:/app/alembic.ini
       - ../backend/gunicorn.conf.py:/app/gunicorn.conf.py
@@ -85,6 +86,7 @@ services:
       dockerfile: dev/Dockerfile.backend # Use the same Dockerfile as backend
     volumes:
       - ../backend/src:/app/src
+      - ../backend/tests:/app/tests
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=postgresql://eioku:eioku_dev@postgres:5432/eioku
@@ -109,6 +111,7 @@ services:
       - "8001:8001"
     volumes:
       - ../ml-service/src:/app/src
+      - ../ml-service/tests:/app/tests
       - ../ml-service/gunicorn.conf.py:/app/gunicorn.conf.py
       - ../test-videos:/media:ro
       - ml_models:/models

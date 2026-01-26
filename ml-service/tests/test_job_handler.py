@@ -1,6 +1,6 @@
 """Unit tests for ML Service job handler."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -152,7 +152,9 @@ class TestProcessInferenceJob:
             }
 
             mock_redis_client = AsyncMock()
-            mock_redis_client.rpush.side_effect = RuntimeError("Redis connection failed")
+            mock_redis_client.rpush.side_effect = RuntimeError(
+                "Redis connection failed"
+            )
             with patch("src.workers.job_handler.redis") as mock_redis_module:
                 mock_redis_module.from_url = AsyncMock(return_value=mock_redis_client)
 
@@ -191,7 +193,9 @@ class TestProcessInferenceJob:
 
                 mock_redis_client = AsyncMock()
                 with patch("src.workers.job_handler.redis") as mock_redis_module:
-                    mock_redis_module.from_url = AsyncMock(return_value=mock_redis_client)
+                    mock_redis_module.from_url = AsyncMock(
+                        return_value=mock_redis_client
+                    )
 
                     result = await process_inference_job(
                         task_id=f"task-{task_type}",

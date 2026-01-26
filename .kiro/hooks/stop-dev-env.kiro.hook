@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Stop Dev Environment",
+  "description": "Stops the development environment by running the stop script in the dev directory",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd dev && ./stop"
+  }
+}
