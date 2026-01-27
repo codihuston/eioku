@@ -60,128 +60,127 @@ class TestJobProducerMLJobsEnqueueing:
     """Test ml_jobs queue enqueueing logic."""
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_object_detection(self):
+    async def test_enqueue_task_object_detection(self):
         """Test enqueueing object detection task to ml_jobs queue."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
-        job_id = await producer.enqueue_to_ml_jobs(
+        job_id = await producer.enqueue_task(
             task_id="task_123",
             task_type="object_detection",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="abc123def456",
         )
 
         assert job_id == "ml_task_123"
         producer.pool.enqueue_job.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_transcription(self):
+    async def test_enqueue_task_transcription(self):
         """Test enqueueing transcription task to ml_jobs queue."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
-        job_id = await producer.enqueue_to_ml_jobs(
+        job_id = await producer.enqueue_task(
             task_id="task_789",
             task_type="transcription",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="xyz789abc123",
         )
 
         assert job_id == "ml_task_789"
         producer.pool.enqueue_job.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_with_config(self):
+    async def test_enqueue_task_with_config(self):
         """Test enqueueing to ml_jobs with configuration."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
         config = {"model": "yolov8n", "confidence": 0.5}
 
-        await producer.enqueue_to_ml_jobs(
+        await producer.enqueue_task(
             task_id="task_123",
             task_type="object_detection",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="abc123def456",
             config=config,
         )
 
         # Verify enqueue_job was called with config
         call_args = producer.pool.enqueue_job.call_args
-        assert call_args[1]["config"] == config
+        assert call_args[0][5] == config
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_without_pool_raises_error(self):
+    async def test_enqueue_task_without_pool_raises_error(self):
         """Test enqueueing to ml_jobs without initialized pool raises RuntimeError."""
         producer = JobProducer()
         producer.pool = None
 
         with pytest.raises(RuntimeError, match="not initialized"):
-            await producer.enqueue_to_ml_jobs(
+            await producer.enqueue_task(
                 task_id="task_123",
                 task_type="object_detection",
                 video_id="video_456",
                 video_path="/path/to/video.mp4",
-                input_hash="abc123def456",
             )
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_unknown_type_raises_error(self):
+    async def test_enqueue_task_unknown_type_raises_error(self):
         """Test enqueueing unknown task type to ml_jobs raises ValueError."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
         with pytest.raises(ValueError, match="Unknown task type"):
-            await producer.enqueue_to_ml_jobs(
+            await producer.enqueue_task(
                 task_id="task_123",
                 task_type="unknown_task",
                 video_id="video_456",
                 video_path="/path/to/video.mp4",
-                input_hash="abc123def456",
             )
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_payload_structure(self):
+    async def test_enqueue_task_payload_structure(self):
         """Test ml_jobs payload has correct structure."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
-        await producer.enqueue_to_ml_jobs(
+        await producer.enqueue_task(
             task_id="task_123",
             task_type="object_detection",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="abc123def456",
             config={"model": "yolov8n"},
         )
 
         # Verify payload structure
-        call_kwargs = producer.pool.enqueue_job.call_args[1]
-        assert call_kwargs["task_id"] == "task_123"
-        assert call_kwargs["task_type"] == "object_detection"
-        assert call_kwargs["video_id"] == "video_456"
-        assert call_kwargs["video_path"] == "/path/to/video.mp4"
-        assert call_kwargs["input_hash"] == "abc123def456"
-        assert call_kwargs["config"] == {"model": "yolov8n"}
-        assert call_kwargs["job_id"] == "ml_task_123"
+        call_args = producer.pool.enqueue_job.call_args
+        call_args_list = call_args[0]
+        call_kwargs = call_args[1]
+
+        # All function parameters should be passed as positional arguments
+        assert call_args_list[0] == "process_ml_task"
+        assert call_args_list[1] == "task_123"
+        assert call_args_list[2] == "object_detection"
+        assert call_args_list[3] == "video_456"
+        assert call_args_list[4] == "/path/to/video.mp4"
+        assert call_args_list[5] == {"model": "yolov8n"}
+
+        # Only arq-specific parameters as kwargs
+        assert call_kwargs["_job_id"] == "ml_task_123"
         assert call_kwargs["_queue_name"] == "ml_jobs"
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_queue_name(self):
+    async def test_enqueue_task_queue_name(self):
         """Test ml_jobs enqueueing uses ml_jobs queue."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
-        await producer.enqueue_to_ml_jobs(
+        await producer.enqueue_task(
             task_id="task_123",
             task_type="transcription",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="xyz789abc123",
         )
 
         # Verify queue name is 'ml_jobs'
@@ -189,43 +188,41 @@ class TestJobProducerMLJobsEnqueueing:
         assert call_kwargs["_queue_name"] == "ml_jobs"
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_handler_name(self):
-        """Test ml_jobs enqueueing uses process_inference_job handler."""
+    async def test_enqueue_task_handler_name(self):
+        """Test ml_jobs enqueueing uses process_ml_task handler."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
-        await producer.enqueue_to_ml_jobs(
+        await producer.enqueue_task(
             task_id="task_123",
             task_type="object_detection",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="abc123def456",
         )
 
-        # Verify handler name is 'process_inference_job'
+        # Verify handler name is 'process_ml_task'
         call_args = producer.pool.enqueue_job.call_args
-        assert call_args[0][0] == "process_inference_job"
+        assert call_args[0][0] == "process_ml_task"
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_job_id_format(self):
+    async def test_enqueue_task_job_id_format(self):
         """Test ml_jobs job_id follows ml_{task_id} format."""
         producer = JobProducer()
         producer.pool = AsyncMock()
 
-        await producer.enqueue_to_ml_jobs(
+        await producer.enqueue_task(
             task_id="abc-123-def",
             task_type="object_detection",
             video_id="video_456",
             video_path="/path/to/video.mp4",
-            input_hash="abc123def456",
         )
 
         # Verify job_id format
         call_kwargs = producer.pool.enqueue_job.call_args[1]
-        assert call_kwargs["job_id"] == "ml_abc-123-def"
+        assert call_kwargs["_job_id"] == "ml_abc-123-def"
 
     @pytest.mark.asyncio
-    async def test_enqueue_to_ml_jobs_all_task_types(self):
+    async def test_enqueue_task_all_task_types(self):
         """Test all supported task types can be enqueued."""
         producer = JobProducer()
         producer.pool = AsyncMock()
@@ -242,12 +239,11 @@ class TestJobProducerMLJobsEnqueueing:
         for task_type in task_types:
             producer.pool.reset_mock()
 
-            await producer.enqueue_to_ml_jobs(
+            await producer.enqueue_task(
                 task_id=f"task_{task_type}",
                 task_type=task_type,
                 video_id="video_456",
                 video_path="/path/to/video.mp4",
-                input_hash="abc123def456",
             )
 
             producer.pool.enqueue_job.assert_called_once()

@@ -3,8 +3,6 @@
 import logging
 from pathlib import Path
 
-import torch
-
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +18,20 @@ class ModelManager:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.models = {}
-        self.gpu_available = torch.cuda.is_available()
+        self._gpu_available = None  # Lazy initialization
+
+    @property
+    def gpu_available(self) -> bool:
+        """Check GPU availability (lazy initialization)."""
+        if self._gpu_available is None:
+            try:
+                import torch
+
+                self._gpu_available = torch.cuda.is_available()
+            except Exception as e:
+                logger.warning(f"Could not check GPU availability: {e}")
+                self._gpu_available = False
+        return self._gpu_available
 
     def _get_device(self) -> str:
         """Get device string for model loading.
@@ -44,27 +55,38 @@ class ModelManager:
 
         try:
             if model_type == "yolo":
+                import os
+
                 from ultralytics import YOLO
 
-                # YOLO will cache to ~/.yolov8 by default
+                # Set YOLO_HOME to cache directory
+                yolo_cache = self.cache_dir / "ultralytics"
+                yolo_cache.mkdir(parents=True, exist_ok=True)
+                os.environ["YOLO_HOME"] = str(yolo_cache)
+
+                # Download model - YOLO respects YOLO_HOME environment variable
                 model = YOLO(model_name)
-                logger.info(f"✓ YOLO model {model_name} downloaded")
-                return Path(model.model_name)
+
+                # Get the actual model path from YOLO
+                model_path = Path(model.model_name)
+                if not model_path.is_absolute():
+                    model_path = yolo_cache / model_name
+
+                logger.info(f"✓ YOLO model {model_name} downloaded to {yolo_cache}")
+                return model_path
 
             elif model_type == "whisper":
-                # faster-whisper handles caching internally to ~/.cache/huggingface
+                # faster-whisper will use HF_HOME environment variable set in main.py
                 from faster_whisper import WhisperModel
 
-                model = WhisperModel(
-                    model_name, device=self._get_device(), compute_type="auto"
-                )
+                WhisperModel(model_name, device=self._get_device(), compute_type="auto")
                 logger.info(f"✓ Whisper model {model_name} downloaded")
                 return Path(model_name)
 
             elif model_type == "easyocr":
+                # EasyOCR will use EASYOCR_HOME environment variable set in main.py
                 import easyocr
 
-                # EasyOCR caches to ~/.EasyOCR by default
                 easyocr.Reader(["en"], gpu=self.gpu_available, verbose=False)
                 logger.info("✓ EasyOCR model downloaded")
                 return Path("easyocr")
@@ -73,7 +95,7 @@ class ModelManager:
                 # Places365 model is loaded via torchvision
                 import torchvision.models as models
 
-                model = models.resnet18(pretrained=False)
+                models.resnet18(pretrained=False)
                 logger.info(f"✓ Places365 model {model_name} downloaded")
                 return Path(model_name)
 
@@ -130,6 +152,8 @@ class ModelManager:
 
             # Log GPU detection result
             if self.gpu_available:
+                import torch
+
                 device_name = torch.cuda.get_device_name(0)
                 logger.info(f"  GPU detected: {device_name}")
             else:
@@ -155,6 +179,8 @@ class ModelManager:
                 "gpu_memory_used_mb": None,
             }
 
+        import torch
+
         device_name = torch.cuda.get_device_name(0)
         total_memory = torch.cuda.get_device_properties(0).total_memory / 1e6
         allocated_memory = torch.cuda.memory_allocated(0) / 1e6
@@ -177,9 +203,482 @@ class ModelManager:
     def log_gpu_info(self):
         """Log GPU information."""
         if self.gpu_available:
+            import torch
+
             device_name = torch.cuda.get_device_name(0)
             total_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
             logger.info(f"GPU device: {device_name}")
             logger.info(f"GPU memory: {total_memory:.2f} GB")
         else:
             logger.warning("GPU not available - will use CPU for inference (slower)")
+
+    async def detect_objects(self, video_path: str, config: dict) -> dict:
+        """Detect objects in video using YOLO.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict with model_name, confidence_threshold, etc.
+
+        Returns:
+            Dictionary with detections
+        """
+        try:
+            from ultralytics import YOLO
+
+            device = self._get_device()
+            model_name = config.get("model_name", "yolov8n.pt")
+            confidence_threshold = config.get("confidence_threshold", 0.5)
+
+            logger.info(f"Object detection: {video_path} (device: {device})")
+
+            # Load model with explicit device
+            # YOLO will auto-download if model_name is just a name,
+            # but we need full path for models in cache directory
+            model_path = str(self.cache_dir / "ultralytics" / model_name)
+            model = YOLO(model_path)
+            model.to(device)
+
+            # Run inference with streaming to avoid memory issues
+            results = model(
+                video_path,
+                conf=confidence_threshold,
+                verbose=False,
+                device=device,
+                stream=True,
+            )
+
+            # Extract detections
+            detections = []
+            for frame_idx, result in enumerate(results):
+                timestamp_ms = int((frame_idx / 30) * 1000)  # Approximate timestamp
+
+                for box in result.boxes:
+                    detection = {
+                        "frame_index": frame_idx,
+                        "timestamp_ms": timestamp_ms,
+                        "label": result.names[int(box.cls)],
+                        "confidence": float(box.conf),
+                        "bbox": {
+                            "x": float(box.xyxy[0][0]),
+                            "y": float(box.xyxy[0][1]),
+                            "width": float(box.xyxy[0][2] - box.xyxy[0][0]),
+                            "height": float(box.xyxy[0][3] - box.xyxy[0][1]),
+                        },
+                    }
+                    detections.append(detection)
+
+            logger.info(f"✅ Object detection complete: {len(detections)} detections")
+            return {"detections": detections}
+
+        except Exception as e:
+            logger.error(f"Object detection failed: {e}", exc_info=True)
+            raise
+
+    async def detect_faces(self, video_path: str, config: dict) -> dict:
+        """Detect faces in video using YOLO.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict with model_name, confidence_threshold, etc.
+
+        Returns:
+            Dictionary with detections
+        """
+        try:
+            from ultralytics import YOLO
+
+            device = self._get_device()
+            model_name = config.get("model_name", "yolov8n-face.pt")
+            confidence_threshold = config.get("confidence_threshold", 0.5)
+
+            logger.info(f"Face detection: {video_path} (device: {device})")
+
+            # Load model with explicit device
+            # YOLO will auto-download if model_name is just a name,
+            # but we need full path for models in cache directory
+            model_path = str(self.cache_dir / "ultralytics" / model_name)
+            model = YOLO(model_path)
+            model.to(device)
+
+            # Run inference with streaming to avoid memory issues
+            results = model(
+                video_path,
+                conf=confidence_threshold,
+                verbose=False,
+                device=device,
+                stream=True,
+            )
+
+            # Extract detections
+            detections = []
+            for frame_idx, result in enumerate(results):
+                timestamp_ms = int((frame_idx / 30) * 1000)
+
+                for box in result.boxes:
+                    detection = {
+                        "frame_index": frame_idx,
+                        "timestamp_ms": timestamp_ms,
+                        "label": "face",
+                        "confidence": float(box.conf),
+                        "bbox": {
+                            "x": float(box.xyxy[0][0]),
+                            "y": float(box.xyxy[0][1]),
+                            "width": float(box.xyxy[0][2] - box.xyxy[0][0]),
+                            "height": float(box.xyxy[0][3] - box.xyxy[0][1]),
+                        },
+                        "cluster_id": None,
+                    }
+                    detections.append(detection)
+
+            logger.info(f"✅ Face detection complete: {len(detections)} detections")
+            return {"detections": detections}
+
+        except Exception as e:
+            logger.error(f"Face detection failed: {e}", exc_info=True)
+            raise
+
+    async def transcribe_video(self, video_path: str, config: dict) -> dict:
+        """Transcribe audio from video using Whisper.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict with model_name, language, vad_filter, etc.
+
+        Returns:
+            Dictionary with segments
+        """
+        try:
+            from faster_whisper import WhisperModel
+
+            device = self._get_device()
+            model_name = config.get("model_name", "base")
+            language = config.get("language", None)
+            vad_filter = config.get("vad_filter", True)
+
+            logger.info(f"Transcription: {video_path} (device: {device})")
+
+            # Load model with explicit device
+            model = WhisperModel(model_name, device=device, compute_type="auto")
+
+            # Run inference
+            segments, info = model.transcribe(
+                video_path,
+                language=language,
+                vad_filter=vad_filter,
+            )
+
+            # Extract segments
+            transcription_segments = []
+            for segment in segments:
+                ts = {
+                    "start_ms": int(segment.start * 1000),
+                    "end_ms": int(segment.end * 1000),
+                    "text": segment.text,
+                    "confidence": None,
+                    "words": None,
+                }
+                transcription_segments.append(ts)
+
+            logger.info(
+                f"✅ Transcription complete: {len(transcription_segments)} segments"
+            )
+            return {"segments": transcription_segments}
+
+        except Exception as e:
+            logger.error(f"Transcription failed: {e}", exc_info=True)
+            raise
+
+    async def extract_ocr(self, video_path: str, config: dict) -> dict:
+        """Extract text from video frames using EasyOCR.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict with languages, frame_interval, etc.
+
+        Returns:
+            Dictionary with detections
+        """
+        try:
+            import cv2
+            import easyocr
+
+            logger.info(f"OCR: {video_path} (GPU: {self.gpu_available})")
+
+            languages = config.get("languages", ["en"])
+            frame_interval = config.get("frame_interval", 1)
+
+            # Load model with explicit GPU flag
+            reader = easyocr.Reader(languages, gpu=self.gpu_available, verbose=False)
+
+            # Open video
+            cap = cv2.VideoCapture(video_path)
+            frame_count = 0
+            detections = []
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # Process every Nth frame
+                if frame_count % frame_interval == 0:
+                    results = reader.readtext(frame)
+
+                    timestamp_ms = int((frame_count / cap.get(cv2.CAP_PROP_FPS)) * 1000)
+
+                    for result in results:
+                        bbox, text, confidence = result
+                        detection = {
+                            "frame_index": frame_count,
+                            "timestamp_ms": timestamp_ms,
+                            "text": text,
+                            "confidence": confidence,
+                            "polygon": [
+                                {"x": float(p[0]), "y": float(p[1])} for p in bbox
+                            ],
+                        }
+                        detections.append(detection)
+
+                frame_count += 1
+
+            cap.release()
+
+            logger.info(f"✅ OCR complete: {len(detections)} detections")
+            return {"detections": detections}
+
+        except Exception as e:
+            logger.error(f"OCR failed: {e}", exc_info=True)
+            raise
+
+    async def classify_places(self, video_path: str, config: dict) -> dict:
+        """Classify places in video frames using Places365.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict with frame_interval, top_k, etc.
+
+        Returns:
+            Dictionary with classifications
+        """
+        try:
+            import cv2
+            import torch
+            import torchvision.models as models
+            import torchvision.transforms as transforms
+            from PIL import Image
+
+            device = self._get_device()
+            logger.info(f"Place detection: {video_path} (device: {device})")
+
+            # Load Places365 labels
+            labels_path = self.cache_dir / "places365" / "categories_places365.txt"
+            if not labels_path.exists():
+                logger.warning(
+                    f"Places365 labels not found at {labels_path}, "
+                    f"using generic labels"
+                )
+                classes = [f"place_{i}" for i in range(365)]
+            else:
+                with open(labels_path) as f:
+                    classes = [line.strip().split(" ")[0][3:] for line in f.readlines()]
+
+            # Load Places365 model
+            model = models.resnet18(pretrained=False)
+            model.fc = torch.nn.Linear(model.fc.in_features, 365)
+
+            # Try to load pretrained weights if available
+            model_path = self.cache_dir / "places365" / "resnet18_places365.pth.tar"
+            if model_path.exists():
+                checkpoint = torch.load(model_path, map_location=device)
+                state_dict = checkpoint.get("state_dict", checkpoint)
+                # Remove 'module.' prefix from keys if present
+                from collections import OrderedDict
+
+                new_state_dict = OrderedDict()
+                for k, v in state_dict.items():
+                    name = k.replace("module.", "")
+                    new_state_dict[name] = v
+                model.load_state_dict(new_state_dict)
+
+            model.to(device)
+            model.eval()
+
+            # Prepare transforms
+            transform = transforms.Compose(
+                [
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225],
+                    ),
+                ]
+            )
+
+            # Process video
+            cap = cv2.VideoCapture(video_path)
+            frame_interval = config.get("frame_interval", 30)
+            top_k = config.get("top_k", 5)
+            classifications = []
+            frame_idx = 0
+
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                # Process every Nth frame
+                if frame_idx % frame_interval == 0:
+                    try:
+                        # Convert frame to PIL Image
+                        img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                        input_img = transform(img).unsqueeze(0).to(device)
+
+                        # Run inference
+                        with torch.no_grad():
+                            logit = model(input_img)
+                            h_x = torch.nn.functional.softmax(logit, 1).squeeze()
+                            probs, idx = h_x.sort(0, True)
+
+                        # Extract top-k predictions
+                        timestamp_ms = int(
+                            (frame_idx / cap.get(cv2.CAP_PROP_FPS)) * 1000
+                        )
+                        top_predictions = [
+                            {
+                                "label": classes[int(i)],
+                                "confidence": float(probs[j]),
+                            }
+                            for j, i in enumerate(idx[:top_k])
+                        ]
+
+                        classification = {
+                            "frame_index": frame_idx,
+                            "timestamp_ms": timestamp_ms,
+                            "predictions": top_predictions,
+                        }
+                        classifications.append(classification)
+
+                    except Exception as e:
+                        logger.warning(f"Error classifying frame {frame_idx}: {e}")
+
+                frame_idx += 1
+
+            cap.release()
+
+            logger.info(
+                f"✅ Place detection complete: {len(classifications)} classifications"
+            )
+            return {"classifications": classifications}
+
+        except Exception as e:
+            logger.error(f"Place detection failed: {e}", exc_info=True)
+            raise
+
+    async def detect_scenes(self, video_path: str, config: dict) -> dict:
+        """Detect scene boundaries in video using ffmpeg.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict with threshold, min_scene_length, etc.
+
+        Returns:
+            Dictionary with scenes
+        """
+        try:
+            import subprocess
+
+            logger.info(f"Scene detection: {video_path}")
+
+            # Get configuration
+            threshold = config.get("threshold", 27.0)
+
+            # Use ffmpeg with scene detection filter
+            # The scenecut filter detects scene changes based on frame differences
+            cmd = [
+                "ffmpeg",
+                "-i",
+                video_path,
+                "-vf",
+                f"select='gt(scene\\,{threshold/100})',showinfo",
+                "-f",
+                "null",
+                "-",
+            ]
+
+            logger.info(f"Running ffmpeg scene detection with threshold {threshold}")
+
+            # Run ffmpeg and capture stderr (where showinfo outputs)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=3600,  # 1 hour timeout
+            )
+
+            # Parse ffmpeg output for scene changes
+            scenes = []
+            scene_idx = 0
+            prev_timestamp_ms = 0
+
+            for line in result.stderr.split("\n"):
+                if "showinfo" in line and "pts_time:" in line:
+                    # Extract timestamp from showinfo output
+                    # Format: ... pts_time:123.456 ...
+                    try:
+                        parts = line.split("pts_time:")
+                        if len(parts) > 1:
+                            timestamp_str = parts[1].split()[0]
+                            timestamp_s = float(timestamp_str)
+                            timestamp_ms = int(timestamp_s * 1000)
+
+                            # Create scene from previous timestamp to current
+                            if scene_idx > 0:
+                                scene = {
+                                    "scene_index": scene_idx - 1,
+                                    "start_ms": prev_timestamp_ms,
+                                    "end_ms": timestamp_ms,
+                                    "duration_ms": timestamp_ms - prev_timestamp_ms,
+                                }
+                                scenes.append(scene)
+
+                            prev_timestamp_ms = timestamp_ms
+                            scene_idx += 1
+                    except (ValueError, IndexError):
+                        continue
+
+            # Add final scene if we detected any changes
+            if scene_idx > 0:
+                # Get video duration
+                duration_cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1:nokey=1",
+                    video_path,
+                ]
+                duration_result = subprocess.run(
+                    duration_cmd, capture_output=True, text=True, timeout=60
+                )
+                try:
+                    duration_ms = int(float(duration_result.stdout.strip()) * 1000)
+                except (ValueError, IndexError):
+                    duration_ms = prev_timestamp_ms + 1000
+
+                scene = {
+                    "scene_index": scene_idx,
+                    "start_ms": prev_timestamp_ms,
+                    "end_ms": duration_ms,
+                    "duration_ms": duration_ms - prev_timestamp_ms,
+                }
+                scenes.append(scene)
+
+            logger.info(f"✅ Scene detection complete: {len(scenes)} scenes")
+            return {"scenes": scenes}
+
+        except Exception as e:
+            logger.error(f"Scene detection failed: {e}", exc_info=True)
+            raise
