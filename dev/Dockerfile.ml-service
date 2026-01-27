@@ -20,9 +20,11 @@ RUN pip install poetry
 # Ensure poetry is on PATH
 ENV PATH="/root/.local/bin:$PATH"
 
-# Configure Poetry to create virtualenvs (needed for dev tools like pytest)
-ENV POETRY_VIRTUALENVS_CREATE=true
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+# Configure Poetry to install dependencies into global site-packages (not virtualenv)
+ENV POETRY_VIRTUALENVS_CREATE=false
+
+# Set CUDA library path - must be set before torch tries to load CUDA libraries
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/cuda-12.6/lib64:$LD_LIBRARY_PATH
 
 WORKDIR /app
 
@@ -32,12 +34,13 @@ COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
 # Install dependencies (including dev tools like ruff, pytest)
 RUN poetry install --no-root
 
-# Add virtualenv to PATH so pytest and other tools are available
-ENV PATH="/app/.venv/bin:$PATH"
-
 # Copy application code
 COPY ml-service/src ./src
 COPY ml-service/gunicorn.conf.py ./gunicorn.conf.py
+
+# Create model cache directories with proper permissions
+RUN mkdir -p /models/ultralytics /models/easyocr /models/huggingface && \
+    chmod 777 /models /models/ultralytics /models/easyocr /models/huggingface
 
 # Expose port
 EXPOSE 8001
@@ -48,6 +51,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Override NVIDIA entrypoint to use our command
 ENTRYPOINT []
-
-# Start the application - command specified in docker-compose.yml
-# CMD ["poetry", "run", "gunicorn", "src.main:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8001"]
