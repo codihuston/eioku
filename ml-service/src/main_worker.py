@@ -1,4 +1,10 @@
-"""Worker Service entry point - arq worker without HTTP endpoints."""
+"""ML Service Worker - arq worker for processing ML jobs from Redis queue.
+
+This service:
+1. Consumes jobs from Redis ml_jobs queue
+2. Processes ML inference tasks
+3. Persists results to PostgreSQL
+"""
 
 import logging
 import logging.config
@@ -13,7 +19,7 @@ class JsonFormatter(jsonlogger.JsonFormatter):
         super().add_fields(log_record, record, message_dict)
         log_record["level"] = record.levelname.lower()
         log_record["name"] = record.name
-        log_record["service"] = "worker"
+        log_record["service"] = "ml-service-worker"
 
 
 def setup_logging():
@@ -73,18 +79,15 @@ def setup_logging():
 setup_logging()
 
 # Now import everything else that might use logging
-from src.workers.arq_worker import (  # noqa: E402
-    WorkerSettings,
-    cron_reconcile,
-    reconcile_tasks,
-)
+from src.config.redis_config import REDIS_SETTINGS  # noqa: E402
+from src.workers.task_handler import process_ml_task  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 
 async def startup(ctx):
-    """Initialize Worker Service on startup."""
-    logger.info("🚀 BACKEND WORKER SERVICE STARTUP")
+    """Initialize ML Service Worker on startup."""
+    logger.info("🚀 ML SERVICE WORKER STARTUP")
 
     logger.info("1️⃣ Registering artifact schemas...")
     from src.domain.schema_initialization import register_all_schemas
@@ -92,56 +95,58 @@ async def startup(ctx):
     register_all_schemas()
     logger.info("✅ Artifact schemas registered")
 
-    logger.info("2️⃣ Initializing reconciler...")
-    from src.database.connection import SessionLocal
-    from src.workers.reconciler import Reconciler
-
-    session = SessionLocal()
-    reconciler = Reconciler(session)
-    logger.info("✅ Reconciler initialized")
-
-    logger.info("3️⃣ Storing in context...")
-    ctx["reconciler"] = reconciler
-    ctx["reconciler_session"] = session
-    logger.info("✅ BACKEND WORKER SERVICE STARTUP COMPLETE")
+    logger.info("✅ ML SERVICE WORKER STARTUP COMPLETE")
 
 
 async def shutdown(ctx):
-    """Clean up Worker Service on shutdown."""
-    logger.info("🛑 BACKEND WORKER SERVICE SHUTTING DOWN...")
-    if "reconciler_session" in ctx:
-        ctx["reconciler_session"].close()
-    logger.info("✅ BACKEND WORKER SERVICE SHUTDOWN COMPLETE")
+    """Clean up ML Service Worker on shutdown."""
+    logger.info("🛑 ML SERVICE WORKER SHUTTING DOWN...")
+    logger.info("✅ ML SERVICE WORKER SHUTDOWN COMPLETE")
 
 
-class App(WorkerSettings):
-    """arq worker settings for backend worker.
+class App:
+    """arq worker settings for ML Service.
 
     This worker:
-    1. Consumes from ml_jobs queue (same queue as ml-service)
-    2. Runs periodic reconciliation to recover from failures
-    3. Does NOT process jobs - ml-service handles that
+    1. Consumes jobs from ml_jobs queue
+    2. Runs ML inference using model manager
+    3. Persists artifacts to PostgreSQL
+    4. Does NOT handle reconciliation (backend worker does that)
     """
 
-    # Shutdown handlers
+    # Queue configuration - worker consumes from ml_jobs queue
+    queue_name = "ml_jobs"
+
+    # Redis connection settings (centralized in redis_config.py)
+    redis_settings = REDIS_SETTINGS
+
+    # Job configuration
+    max_jobs = int(os.getenv("WORKER_MAX_JOBS", "1"))
+    job_timeout = int(os.getenv("WORKER_JOB_TIMEOUT", "3600"))  # 1 hour
+    max_tries = int(os.getenv("WORKER_MAX_TRIES", "1"))  # No retries for now
+
+    # Polling configuration
+    poll_delay = 0.1  # Poll every 100ms
+
+    # Shutdown
     on_startup = startup
     on_shutdown = shutdown
 
-    # Functions to register with arq
-    functions = [reconcile_tasks]
+    # Functions to register with arq - ONLY job processing
+    functions = [process_ml_task]
 
-    # Cron tasks (periodic reconciliation every 5 minutes)
-    cron_jobs = [cron_reconcile]
+    # No cron tasks - reconciliation runs in backend worker
+    cron_jobs = []
 
     # Logging
     log_level = logging.DEBUG
 
     # Worker identification
-    worker_name = f"backend-worker-{os.getenv('HOSTNAME', 'unknown')}"
+    worker_name = f"ml-worker-{os.getenv('HOSTNAME', 'unknown')}"
 
 
 # Export for arq
 App = App
 
 # Export functions for arq to discover
-functions = [reconcile_tasks]
+functions = [process_ml_task]

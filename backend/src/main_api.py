@@ -94,6 +94,9 @@ from src.repositories.path_config_repository import (  # noqa: E402
 from src.services.config_loader import ConfigLoader  # noqa: E402
 from src.services.job_producer import JobProducer  # noqa: E402
 from src.services.path_config_manager import PathConfigManager  # noqa: E402
+from src.services.reconciliation_service import (  # noqa: E402
+    start_reconciliation_loop,
+)
 from src.services.video_discovery_service import VideoDiscoveryService  # noqa: E402
 
 # Get a logger instance for this module
@@ -194,10 +197,26 @@ async def lifespan(app: FastAPI):
         traceback.print_exc()
         raise  # Re-raise to prevent app from starting
 
+    # Start reconciliation loop in background
+    logger.info("1️⃣2️⃣ Starting reconciliation loop...")
+    import asyncio
+
+    reconciliation_task = asyncio.create_task(
+        start_reconciliation_loop(session, job_producer, interval_seconds=300)
+    )
+    app.state.reconciliation_task = reconciliation_task
+    logger.info("✅ Reconciliation loop started")
+
     yield
 
     # Shutdown
     logger.info("🛑 API SERVICE SHUTTING DOWN...")
+    if hasattr(app.state, "reconciliation_task"):
+        app.state.reconciliation_task.cancel()
+        try:
+            await app.state.reconciliation_task
+        except asyncio.CancelledError:
+            logger.info("Reconciliation task cancelled")
     if hasattr(app.state, "job_producer"):
         await app.state.job_producer.close()
     session.close()

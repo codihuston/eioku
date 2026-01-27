@@ -74,8 +74,8 @@ class WorkerSettings:
     # Job handler functions (will be populated when handlers are implemented)
     functions = []
 
-    # Worker consumes from the single 'jobs' queue
-    queue_name = "jobs"
+    # Worker consumes from the single 'ml_jobs' queue
+    queue_name = "ml_jobs"
 
     # Redis connection settings (centralized in redis_config.py)
     redis_settings = REDIS_SETTINGS

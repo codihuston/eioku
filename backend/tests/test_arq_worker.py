@@ -24,7 +24,7 @@ class TestWorkerSettings:
         from src.workers.arq_worker import WorkerSettings
 
         settings = WorkerSettings()
-        assert settings.queue_name == "jobs"
+        assert settings.queue_name == "ml_jobs"
 
     def test_worker_settings_default_max_jobs(self):
         """Test WorkerSettings uses default max_jobs=4."""

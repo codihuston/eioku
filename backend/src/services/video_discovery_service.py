@@ -98,6 +98,17 @@ class VideoDiscoveryService:
                 f"File stats - size: {stat.st_size}, modified: {stat.st_mtime}"
             )
 
+            # Compute file hash during discovery
+            from .file_hash_service import FileHashService
+
+            hash_service = FileHashService()
+            try:
+                file_hash = hash_service.calculate_hash(str(file_path))
+                logger.info(f"Computed file hash for {file_path.name}: {file_hash}")
+            except Exception as e:
+                logger.error(f"Failed to compute file hash for {file_path}: {e}")
+                file_hash = None
+
             # Create new video
             import uuid
             from datetime import datetime
@@ -106,6 +117,7 @@ class VideoDiscoveryService:
                 video_id=str(uuid.uuid4()),
                 file_path=str(file_path),
                 filename=file_path.name,
+                file_hash=file_hash,
                 last_modified=datetime.fromtimestamp(stat.st_mtime),
                 status="discovered",
                 file_size=stat.st_size,
@@ -183,14 +195,13 @@ class VideoDiscoveryService:
         existing = self.video_repository.find_by_path(video_path)
         if existing:
             logger.info(f"Video already exists: {existing.video_id}")
-            return existing.video_id
-
-        # Create video record
-        video = self._create_video_from_file(video_file)
-        if not video:
-            raise ValueError(f"Failed to create video record for: {video_path}")
-
-        logger.info(f"Created video record: {video.video_id}")
+            video = existing
+        else:
+            # Create video record
+            video = self._create_video_from_file(video_file)
+            if not video:
+                raise ValueError(f"Failed to create video record for: {video_path}")
+            logger.info(f"Created video record: {video.video_id}")
 
         # Auto-create tasks for all ML operations
         from ..domain.models import Task

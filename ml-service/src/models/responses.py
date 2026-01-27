@@ -156,3 +156,39 @@ class HealthResponse(BaseModel):
         default=None, description="Total GPU memory"
     )
     gpu_memory_used_mb: int | None = Field(default=None, description="Used GPU memory")
+
+
+class AcceptedResponse(BaseModel):
+    """Response for async job submission (202 Accepted)."""
+
+    task_id: str = Field(..., description="Task identifier")
+    status: str = Field(default="accepted", description="Job status")
+
+
+class TaskInfo(BaseModel):
+    """Information about a running ML task."""
+
+    task_id: str = Field(..., description="Task identifier")
+    endpoint: str = Field(..., description="Inference endpoint")
+    pid: int = Field(..., description="Process ID")
+    start_time: str = Field(..., description="Task start time (ISO format)")
+    elapsed_seconds: float = Field(..., description="Elapsed time in seconds")
+    cpu_percent: float = Field(..., description="CPU usage percentage")
+    memory_mb: float = Field(..., description="Memory usage in MB")
+    num_threads: int = Field(..., description="Number of threads")
+    gpu_percent: float = Field(..., description="GPU usage percentage")
+    gpu_memory_mb: float = Field(..., description="GPU memory usage in MB")
+
+
+class TaskSummaryResponse(BaseModel):
+    """Summary of all running ML tasks."""
+
+    running_tasks: int = Field(..., description="Number of running tasks")
+    total_cpu_percent: float = Field(..., description="Total CPU usage percentage")
+    total_memory_mb: float = Field(..., description="Total memory usage in MB")
+    total_gpu_percent: float = Field(..., description="Total GPU usage percentage")
+    total_gpu_memory_mb: float = Field(..., description="Total GPU memory usage in MB")
+    total_threads: int = Field(..., description="Total number of threads")
+    tasks: list[TaskInfo] = Field(
+        default_factory=list, description="List of running tasks"
+    )

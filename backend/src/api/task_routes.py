@@ -354,6 +354,34 @@ async def retry_task(
         raise HTTPException(status_code=500, detail=f"Failed to retry task: {str(e)}")
 
 
+@router.post(
+    "/reconcile",
+    summary="Manually trigger reconciliation",
+    description="Run reconciliation to sync pending tasks and re-enqueue missing jobs.",
+)
+async def manual_reconcile(
+    db: Session = Depends(get_db),
+) -> dict:
+    """Manually trigger reconciliation (one-shot)."""
+    from ..services.job_producer import JobProducer
+    from ..services.reconciliation_service import ReconciliationService
+
+    try:
+        job_producer = JobProducer()
+        await job_producer.initialize()
+        service = ReconciliationService(db, job_producer)
+        stats = await service.run()
+        await job_producer.close()
+        return {
+            "status": "success",
+            "message": "Reconciliation completed",
+            "stats": stats,
+        }
+    except Exception as e:
+        logger.error(f"Manual reconciliation failed: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
 @router.get(
     "",
     response_model=TaskListResponse,

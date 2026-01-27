@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 class JobProducer:
     """Produces jobs for ML task execution.
 
-    All jobs are enqueued to the ml_jobs queue for the ml-service worker to consume.
-    The ml-service worker then processes jobs and pushes results to Redis.
+    All jobs are enqueued to the ml_jobs queue for the worker to consume.
+    The worker then processes jobs and pushes results to Redis.
     """
 
     # All supported tasks
@@ -69,9 +69,9 @@ class JobProducer:
         video_path: str,
         config: dict | None = None,
     ) -> str:
-        """Enqueue a job to the ml_jobs queue for ml-service worker to consume.
+        """Enqueue a job to the ml_jobs queue for worker to consume.
 
-        The ml-service worker will dequeue this job and process it.
+        The worker will dequeue this job and process it.
 
         Args:
             task_id: Unique task identifier

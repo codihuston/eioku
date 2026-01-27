@@ -80,27 +80,6 @@ services:
     networks:
       - eioku-dev
 
-  worker:
-    build:
-      context: ..
-      dockerfile: dev/Dockerfile.backend # Use the same Dockerfile as backend
-    volumes:
-      - ../backend/src:/app/src
-      - ../backend/tests:/app/tests
-    environment:
-      - PYTHONPATH=/app
-      - DATABASE_URL=postgresql://eioku:eioku_dev@postgres:5432/eioku
-      - REDIS_URL=redis://valkey:6379
-    working_dir: /app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    command: poetry run arq src.main_worker.App
-    networks:
-      - eioku-dev
-
   ml-service:
     build:
       context: ..
@@ -112,21 +91,32 @@ services:
     volumes:
       - ../ml-service/src:/app/src
       - ../ml-service/tests:/app/tests
-      - ../ml-service/gunicorn.conf.py:/app/gunicorn.conf.py
       - ../test-videos:/media:ro
       - ml_models:/models
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://eioku:eioku_dev@postgres:5432/eioku
+      - REDIS_URL=redis://valkey:6379
+      - WORKER_MAX_JOBS=1
       - GPU_CONCURRENCY=2
       - MODEL_CACHE_DIR=/models
       # Model library cache directories
       - HF_HOME=/models/huggingface
-      - YOLO_CONFIG_DIR=/models/ultralytics
-      - EASYOCR_HOME=/models/easyocr5
+      - YOLO_HOME=/models/ultralytics
+      - EASYOCR_HOME=/models/easyocr
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # CUDA library paths
+      - LD_LIBRARY_PATH=/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/cuda-12.6/lib64
     working_dir: /app
-    command: poetry run uvicorn src.main:app --host 0.0.0.0 --port 8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    command: poetry run arq src.main_worker.App
+    networks:
+      - eioku-dev
     deploy:
       resources:
         reservations:
