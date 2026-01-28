@@ -223,6 +223,7 @@ class ModelManager:
             Dictionary with detections
         """
         try:
+            import cv2
             from ultralytics import YOLO
 
             device = self._get_device()
@@ -230,6 +231,12 @@ class ModelManager:
             confidence_threshold = config.get("confidence_threshold", 0.5)
 
             logger.info(f"Object detection: {video_path} (device: {device})")
+
+            # Get video FPS
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            cap.release()
+            logger.info(f"Video FPS: {fps}")
 
             # Load model with explicit device
             # YOLO will auto-download if model_name is just a name,
@@ -250,7 +257,7 @@ class ModelManager:
             # Extract detections
             detections = []
             for frame_idx, result in enumerate(results):
-                timestamp_ms = int((frame_idx / 30) * 1000)  # Approximate timestamp
+                timestamp_ms = int((frame_idx / fps) * 1000)
 
                 for box in result.boxes:
                     detection = {
@@ -280,18 +287,34 @@ class ModelManager:
         Args:
             video_path: Path to video file
             config: Configuration dict with model_name, confidence_threshold, etc.
+                   frame_interval can be in seconds (will be converted to frames)
 
         Returns:
             Dictionary with detections
         """
         try:
+            import cv2
             from ultralytics import YOLO
 
             device = self._get_device()
             model_name = config.get("model_name", "yolov8n-face.pt")
-            confidence_threshold = config.get("confidence_threshold", 0.5)
+            confidence_threshold = config.get("confidence_threshold", 0.7)
+            frame_interval_seconds = config.get("frame_interval", 3)
 
             logger.info(f"Face detection: {video_path} (device: {device})")
+
+            # Get video FPS to calculate frame interval
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            cap.release()
+            logger.info(f"Video FPS: {fps}")
+
+            # Convert seconds to frame interval
+            frame_interval = max(1, int(fps * frame_interval_seconds))
+            logger.info(
+                f"Processing every {frame_interval} frames "
+                f"(every {frame_interval_seconds}s at {fps} FPS)"
+            )
 
             # Load model with explicit device
             # YOLO will auto-download if model_name is just a name,
@@ -312,14 +335,24 @@ class ModelManager:
             # Extract detections
             detections = []
             for frame_idx, result in enumerate(results):
-                timestamp_ms = int((frame_idx / 30) * 1000)
+                # Skip frames based on frame_interval
+                if frame_idx % frame_interval != 0:
+                    continue
+
+                timestamp_ms = int((frame_idx / fps) * 1000)
 
                 for box in result.boxes:
+                    confidence = float(box.conf)
+
+                    # Additional safety filter: only keep high-confidence detections
+                    if confidence < confidence_threshold:
+                        continue
+
                     detection = {
                         "frame_index": frame_idx,
                         "timestamp_ms": timestamp_ms,
                         "label": "face",
-                        "confidence": float(box.conf),
+                        "confidence": confidence,
                         "bbox": {
                             "x": float(box.xyxy[0][0]),
                             "y": float(box.xyxy[0][1]),
