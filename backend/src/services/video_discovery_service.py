@@ -64,16 +64,20 @@ class VideoDiscoveryService:
             return videos
 
         # Use glob patterns for each supported format (much more efficient)
+        # Check both lowercase and uppercase extensions for case-insensitive matching
         for extension in self.SUPPORTED_FORMATS:
-            pattern = f"**/*{extension}" if path_config.recursive else f"*{extension}"
-            logger.debug(f"Scanning with pattern: {pattern}")
+            for ext_variant in [extension, extension.upper()]:
+                pattern = (
+                    f"**/*{ext_variant}" if path_config.recursive else f"*{ext_variant}"
+                )
+                logger.debug(f"Scanning with pattern: {pattern}")
 
-            glob_method = path.rglob if path_config.recursive else path.glob
-            for video_file in glob_method(f"*{extension}"):
-                if video_file.is_file():
-                    video = self._create_video_from_file(video_file)
-                    if video:
-                        videos.append(video)
+                glob_method = path.rglob if path_config.recursive else path.glob
+                for video_file in glob_method(f"*{ext_variant}"):
+                    if video_file.is_file():
+                        video = self._create_video_from_file(video_file)
+                        if video:
+                            videos.append(video)
 
         return videos
 
