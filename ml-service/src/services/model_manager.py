@@ -591,7 +591,8 @@ class ModelManager:
             logger.info(f"Scene detection: {video_path}")
 
             # Get configuration
-            threshold = config.get("threshold", 27.0)
+            # Threshold is 0-1 scale where higher = fewer scene cuts
+            threshold = config.get("threshold", 0.7)
 
             # Use ffmpeg with scene detection filter
             # The scenecut filter detects scene changes based on frame differences
@@ -600,7 +601,7 @@ class ModelManager:
                 "-i",
                 video_path,
                 "-vf",
-                f"select='gt(scene\\,{threshold/100})',showinfo",
+                f"select='gt(scene\\,{threshold})',showinfo",
                 "-f",
                 "null",
                 "-",
