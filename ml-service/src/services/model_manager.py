@@ -233,58 +233,70 @@ class ModelManager:
 
             logger.info(f"Object detection: {video_path} (device: {device})")
 
-            # Get video FPS
+            # Open video and get properties
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 30
-            cap.release()
-            logger.info(f"Video FPS: {fps}")
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            logger.info(f"Video FPS: {fps}, Total frames: {total_frames}")
 
             # Convert seconds to frame interval
             frame_interval = max(1, int(fps * frame_interval_seconds))
+            frames_to_process = (total_frames + frame_interval - 1) // frame_interval
             logger.info(
                 f"Processing every {frame_interval} frames "
-                f"(every {frame_interval_seconds}s at {fps} FPS)"
+                f"(every {frame_interval_seconds}s at {fps} FPS, "
+                f"~{frames_to_process} frames to process)"
             )
 
             # Load model with explicit device
-            # YOLO will auto-download if model_name is just a name,
-            # but we need full path for models in cache directory
             model_path = str(self.cache_dir / "ultralytics" / model_name)
             model = YOLO(model_path)
             model.to(device)
 
-            # Run inference with streaming to avoid memory issues
-            results = model(
-                video_path,
-                conf=confidence_threshold,
-                verbose=False,
-                device=device,
-                stream=True,
-            )
-
-            # Extract detections
+            # Extract detections by reading only the frames we need
             detections = []
-            for frame_idx, result in enumerate(results):
-                # Skip frames based on interval
-                if frame_idx % frame_interval != 0:
-                    continue
+            frame_idx = 0
 
-                timestamp_ms = int((frame_idx / fps) * 1000)
+            while True:
+                if frame_idx % frame_interval == 0:
+                    # Read and decode frame for processing
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-                for box in result.boxes:
-                    detection = {
-                        "frame_index": frame_idx,
-                        "timestamp_ms": timestamp_ms,
-                        "label": result.names[int(box.cls)],
-                        "confidence": float(box.conf),
-                        "bbox": {
-                            "x": float(box.xyxy[0][0]),
-                            "y": float(box.xyxy[0][1]),
-                            "width": float(box.xyxy[0][2] - box.xyxy[0][0]),
-                            "height": float(box.xyxy[0][3] - box.xyxy[0][1]),
-                        },
-                    }
-                    detections.append(detection)
+                    timestamp_ms = int((frame_idx / fps) * 1000)
+
+                    # Run inference on single frame
+                    results = model(
+                        frame,
+                        conf=confidence_threshold,
+                        verbose=False,
+                        device=device,
+                    )
+
+                    for result in results:
+                        for box in result.boxes:
+                            detection = {
+                                "frame_index": frame_idx,
+                                "timestamp_ms": timestamp_ms,
+                                "label": result.names[int(box.cls)],
+                                "confidence": float(box.conf),
+                                "bbox": {
+                                    "x": float(box.xyxy[0][0]),
+                                    "y": float(box.xyxy[0][1]),
+                                    "width": float(box.xyxy[0][2] - box.xyxy[0][0]),
+                                    "height": float(box.xyxy[0][3] - box.xyxy[0][1]),
+                                },
+                            }
+                            detections.append(detection)
+                else:
+                    # Skip frame without decoding (faster than read())
+                    if not cap.grab():
+                        break
+
+                frame_idx += 1
+
+            cap.release()
 
             logger.info(f"✅ Object detection complete: {len(detections)} detections")
             return {"detections": detections}
@@ -315,65 +327,77 @@ class ModelManager:
 
             logger.info(f"Face detection: {video_path} (device: {device})")
 
-            # Get video FPS to calculate frame interval
+            # Open video and get properties
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 30
-            cap.release()
-            logger.info(f"Video FPS: {fps}")
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            logger.info(f"Video FPS: {fps}, Total frames: {total_frames}")
 
             # Convert seconds to frame interval
             frame_interval = max(1, int(fps * frame_interval_seconds))
+            frames_to_process = (total_frames + frame_interval - 1) // frame_interval
             logger.info(
                 f"Processing every {frame_interval} frames "
-                f"(every {frame_interval_seconds}s at {fps} FPS)"
+                f"(every {frame_interval_seconds}s at {fps} FPS, "
+                f"~{frames_to_process} frames to process)"
             )
 
             # Load model with explicit device
-            # YOLO will auto-download if model_name is just a name,
-            # but we need full path for models in cache directory
             model_path = str(self.cache_dir / "ultralytics" / model_name)
             model = YOLO(model_path)
             model.to(device)
 
-            # Run inference with streaming to avoid memory issues
-            results = model(
-                video_path,
-                conf=confidence_threshold,
-                verbose=False,
-                device=device,
-                stream=True,
-            )
-
-            # Extract detections
+            # Extract detections by reading only the frames we need
             detections = []
-            for frame_idx, result in enumerate(results):
-                # Skip frames based on frame_interval
-                if frame_idx % frame_interval != 0:
-                    continue
+            frame_idx = 0
 
-                timestamp_ms = int((frame_idx / fps) * 1000)
+            while True:
+                if frame_idx % frame_interval == 0:
+                    # Read and decode frame for processing
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-                for box in result.boxes:
-                    confidence = float(box.conf)
+                    timestamp_ms = int((frame_idx / fps) * 1000)
 
-                    # Additional safety filter: only keep high-confidence detections
-                    if confidence < confidence_threshold:
-                        continue
+                    # Run inference on single frame
+                    results = model(
+                        frame,
+                        conf=confidence_threshold,
+                        verbose=False,
+                        device=device,
+                    )
 
-                    detection = {
-                        "frame_index": frame_idx,
-                        "timestamp_ms": timestamp_ms,
-                        "label": "face",
-                        "confidence": confidence,
-                        "bbox": {
-                            "x": float(box.xyxy[0][0]),
-                            "y": float(box.xyxy[0][1]),
-                            "width": float(box.xyxy[0][2] - box.xyxy[0][0]),
-                            "height": float(box.xyxy[0][3] - box.xyxy[0][1]),
-                        },
-                        "cluster_id": None,
-                    }
-                    detections.append(detection)
+                    for result in results:
+                        for box in result.boxes:
+                            confidence = float(box.conf)
+
+                            # Additional safety filter: only keep high-confidence detections
+                            if confidence < confidence_threshold:
+                                continue
+
+                            detection = {
+                                "frame_index": frame_idx,
+                                "timestamp_ms": timestamp_ms,
+                                "label": "face",
+                                "confidence": confidence,
+                                "bbox": {
+                                    "x": float(box.xyxy[0][0]),
+                                    "y": float(box.xyxy[0][1]),
+                                    "width": float(box.xyxy[0][2] - box.xyxy[0][0]),
+                                    "height": float(box.xyxy[0][3] - box.xyxy[0][1]),
+                                },
+                                "cluster_id": None,
+                            }
+                            detections.append(detection)
+                else:
+                    # Skip frame without decoding (faster than read())
+                    if not cap.grab():
+                        break
+
+                frame_idx += 1
+
+            cap.release()
 
             logger.info(f"✅ Face detection complete: {len(detections)} detections")
             return {"detections": detections}
@@ -387,7 +411,7 @@ class ModelManager:
 
         Args:
             video_path: Path to video file
-            config: Configuration dict with model_name, language, vad_filter, etc.
+            config: Configuration dict with model_name, languages, vad_filter, etc.
 
         Returns:
             Dictionary with segments
@@ -397,7 +421,14 @@ class ModelManager:
 
             device = self._get_device()
             model_name = config.get("model_name", "base")
-            language = config.get("language", None)
+            languages = config.get("languages", None)
+            # Handle both single language string and languages array
+            language = None
+            if languages:
+                if isinstance(languages, list):
+                    language = languages[0] if languages else None
+                else:
+                    language = languages
             vad_filter = config.get("vad_filter", True)
 
             logger.info(f"Transcription: {video_path} (device: {device})")
@@ -414,11 +445,13 @@ class ModelManager:
 
             # Extract segments
             transcription_segments = []
+            detected_language = info.language
             for segment in segments:
                 ts = {
                     "start_ms": int(segment.start * 1000),
                     "end_ms": int(segment.end * 1000),
                     "text": segment.text,
+                    "language": detected_language,
                     "confidence": None,
                     "words": None,
                 }
@@ -438,7 +471,7 @@ class ModelManager:
 
         Args:
             video_path: Path to video file
-            config: Configuration dict with languages, frame_interval, etc.
+            config: Configuration dict with languages, frame_interval (in seconds), etc.
 
         Returns:
             Dictionary with detections
@@ -450,41 +483,57 @@ class ModelManager:
             logger.info(f"OCR: {video_path} (GPU: {self.gpu_available})")
 
             languages = config.get("languages", ["en"])
-            frame_interval = config.get("frame_interval", 1)
+            frame_interval_seconds = config.get("frame_interval", 2)
 
             # Load model with explicit GPU flag
             reader = easyocr.Reader(languages, gpu=self.gpu_available, verbose=False)
 
             # Open video
             cap = cv2.VideoCapture(video_path)
-            frame_count = 0
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            # Convert seconds to frame interval
+            frame_interval = max(1, int(fps * frame_interval_seconds))
+            frames_to_process = (total_frames + frame_interval - 1) // frame_interval
+            logger.info(
+                f"Video FPS: {fps}, Total frames: {total_frames}, "
+                f"Processing every {frame_interval} frames "
+                f"(every {frame_interval_seconds}s, ~{frames_to_process} frames to process)"
+            )
+
+            frame_idx = 0
             detections = []
 
             while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
+                if frame_idx % frame_interval == 0:
+                    # Read and decode frame for processing
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
 
-                # Process every Nth frame
-                if frame_count % frame_interval == 0:
                     results = reader.readtext(frame)
-
-                    timestamp_ms = int((frame_count / cap.get(cv2.CAP_PROP_FPS)) * 1000)
+                    timestamp_ms = int((frame_idx / fps) * 1000)
 
                     for result in results:
                         bbox, text, confidence = result
                         detection = {
-                            "frame_index": frame_count,
+                            "frame_index": frame_idx,
                             "timestamp_ms": timestamp_ms,
                             "text": text,
                             "confidence": confidence,
+                            "languages": languages,
                             "polygon": [
                                 {"x": float(p[0]), "y": float(p[1])} for p in bbox
                             ],
                         }
                         detections.append(detection)
+                else:
+                    # Skip frame without decoding (faster than read())
+                    if not cap.grab():
+                        break
 
-                frame_count += 1
+                frame_idx += 1
 
             cap.release()
 
@@ -500,7 +549,7 @@ class ModelManager:
 
         Args:
             video_path: Path to video file
-            config: Configuration dict with frame_interval, top_k, etc.
+            config: Configuration dict with frame_interval (in seconds), top_k, etc.
 
         Returns:
             Dictionary with classifications
@@ -516,14 +565,30 @@ class ModelManager:
             logger.info(f"Place detection: {video_path} (device: {device})")
 
             # Load Places365 labels
-            labels_path = self.cache_dir / "places365" / "categories_places365.txt"
-            if not labels_path.exists():
+            # Try multiple locations: cache dir, project root, or relative to module
+            possible_paths = [
+                self.cache_dir / "places365" / "categories_places365.txt",
+                Path(__file__).parent.parent.parent / "categories_places365.txt",
+                (
+                    Path(__file__).parent.parent.parent.parent
+                    / "ml-service"
+                    / "categories_places365.txt"
+                ),
+            ]
+
+            labels_path = None
+            for path in possible_paths:
+                if path.exists():
+                    labels_path = path
+                    break
+
+            if labels_path is None:
                 logger.warning(
-                    f"Places365 labels not found at {labels_path}, "
-                    f"using generic labels"
+                    "Places365 labels not found in any location, using generic labels"
                 )
                 classes = [f"place_{i}" for i in range(365)]
             else:
+                logger.info(f"Loading Places365 labels from {labels_path}")
                 with open(labels_path) as f:
                     classes = [line.strip().split(" ")[0][3:] for line in f.readlines()]
 
@@ -562,18 +627,30 @@ class ModelManager:
 
             # Process video
             cap = cv2.VideoCapture(video_path)
-            frame_interval = config.get("frame_interval", 30)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            frame_interval_seconds = config.get("frame_interval", 1)
             top_k = config.get("top_k", 5)
+
+            # Convert seconds to frame interval
+            frame_interval = max(1, int(fps * frame_interval_seconds))
+            frames_to_process = (total_frames + frame_interval - 1) // frame_interval
+            logger.info(
+                f"Video FPS: {fps}, Total frames: {total_frames}, "
+                f"Processing every {frame_interval} frames "
+                f"(every {frame_interval_seconds}s, ~{frames_to_process} frames to process)"
+            )
+
             classifications = []
             frame_idx = 0
 
             while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-
-                # Process every Nth frame
                 if frame_idx % frame_interval == 0:
+                    # Read and decode frame for processing
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+
                     try:
                         # Convert frame to PIL Image
                         img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -586,9 +663,7 @@ class ModelManager:
                             probs, idx = h_x.sort(0, True)
 
                         # Extract top-k predictions
-                        timestamp_ms = int(
-                            (frame_idx / cap.get(cv2.CAP_PROP_FPS)) * 1000
-                        )
+                        timestamp_ms = int((frame_idx / fps) * 1000)
                         top_predictions = [
                             {
                                 "label": classes[int(i)],
@@ -606,6 +681,10 @@ class ModelManager:
 
                     except Exception as e:
                         logger.warning(f"Error classifying frame {frame_idx}: {e}")
+                else:
+                    # Skip frame without decoding (faster than read())
+                    if not cap.grab():
+                        break
 
                 frame_idx += 1
 
@@ -693,27 +772,27 @@ class ModelManager:
                     except (ValueError, IndexError):
                         continue
 
+            # Get video duration for final scene or fallback
+            duration_cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1:nokey=1",
+                video_path,
+            ]
+            duration_result = subprocess.run(
+                duration_cmd, capture_output=True, text=True, timeout=60
+            )
+            try:
+                duration_ms = int(float(duration_result.stdout.strip()) * 1000)
+            except (ValueError, IndexError):
+                duration_ms = prev_timestamp_ms + 1000
+
             # Add final scene if we detected any changes
             if scene_idx > 0:
-                # Get video duration
-                duration_cmd = [
-                    "ffprobe",
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "default=noprint_wrappers=1:nokey=1:nokey=1",
-                    video_path,
-                ]
-                duration_result = subprocess.run(
-                    duration_cmd, capture_output=True, text=True, timeout=60
-                )
-                try:
-                    duration_ms = int(float(duration_result.stdout.strip()) * 1000)
-                except (ValueError, IndexError):
-                    duration_ms = prev_timestamp_ms + 1000
-
                 scene = {
                     "scene_index": scene_idx,
                     "start_ms": prev_timestamp_ms,
@@ -721,6 +800,19 @@ class ModelManager:
                     "duration_ms": duration_ms - prev_timestamp_ms,
                 }
                 scenes.append(scene)
+            else:
+                # No scene cuts detected - create one scene for entire video
+                scene = {
+                    "scene_index": 0,
+                    "start_ms": 0,
+                    "end_ms": duration_ms,
+                    "duration_ms": duration_ms,
+                }
+                scenes.append(scene)
+                logger.info(
+                    f"No scene cuts detected. Created single scene for entire video "
+                    f"({duration_ms}ms)"
+                )
 
             logger.info(f"✅ Scene detection complete: {len(scenes)} scenes")
             return {"scenes": scenes}
