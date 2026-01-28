@@ -217,7 +217,7 @@ class ModelManager:
 
         Args:
             video_path: Path to video file
-            config: Configuration dict with model_name, confidence_threshold, etc.
+            config: Configuration dict with model_name, confidence_threshold, frame_interval, etc.
 
         Returns:
             Dictionary with detections
@@ -229,6 +229,7 @@ class ModelManager:
             device = self._get_device()
             model_name = config.get("model_name", "yolov8n.pt")
             confidence_threshold = config.get("confidence_threshold", 0.5)
+            frame_interval_seconds = config.get("frame_interval", 1)
 
             logger.info(f"Object detection: {video_path} (device: {device})")
 
@@ -237,6 +238,13 @@ class ModelManager:
             fps = cap.get(cv2.CAP_PROP_FPS) or 30
             cap.release()
             logger.info(f"Video FPS: {fps}")
+
+            # Convert seconds to frame interval
+            frame_interval = max(1, int(fps * frame_interval_seconds))
+            logger.info(
+                f"Processing every {frame_interval} frames "
+                f"(every {frame_interval_seconds}s at {fps} FPS)"
+            )
 
             # Load model with explicit device
             # YOLO will auto-download if model_name is just a name,
@@ -257,6 +265,10 @@ class ModelManager:
             # Extract detections
             detections = []
             for frame_idx, result in enumerate(results):
+                # Skip frames based on interval
+                if frame_idx % frame_interval != 0:
+                    continue
+
                 timestamp_ms = int((frame_idx / fps) * 1000)
 
                 for box in result.boxes:

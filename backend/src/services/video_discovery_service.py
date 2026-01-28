@@ -288,38 +288,37 @@ class VideoDiscoveryService:
 
                 with open(config_file) as f:
                     config_data = json.load(f)
-                    task_settings = config_data.get("task_settings", {})
+                    all_settings = config_data.get("task_settings", {})
+                    # Get task-specific settings if available
+                    task_settings = all_settings.get(task_type, {})
             except Exception as e:
                 logger.warning(f"Failed to load config file: {e}")
 
-        configs = {
+        # Default configurations with fallbacks
+        defaults = {
             "object_detection": {
-                "model_name": task_settings.get("object_detection_model", "yolov8n.pt"),
-                "frame_interval": 30,
-                "confidence_threshold": 0.5,
+                "model_name": "yolov8n.pt",
+                "frame_interval": 3,
+                "confidence_threshold": 0.7,
                 "model_profile": "balanced",
             },
             "face_detection": {
-                "model_name": task_settings.get(
-                    "face_detection_model", "yolov8n-face.pt"
-                ),
-                "frame_interval": task_settings.get(
-                    "face_sampling_interval_seconds", 1
-                ),
-                "confidence_threshold": 0.5,
+                "model_name": "yolov8n-face.pt",
+                "frame_interval": 3,
+                "confidence_threshold": 0.7,
             },
             "transcription": {
-                "model_name": task_settings.get("transcription_model", "large-v3"),
+                "model_name": "large-v3",
                 "language": None,
                 "vad_filter": True,
             },
             "ocr": {
-                "frame_interval": 60,
+                "frame_interval": 2,
                 "languages": ["en"],
                 "use_gpu": True,
             },
             "place_detection": {
-                "frame_interval": 60,
+                "frame_interval": 2,
                 "top_k": 5,
             },
             "scene_detection": {
@@ -327,4 +326,16 @@ class VideoDiscoveryService:
                 "min_scene_length": 0.6,
             },
         }
-        return configs.get(task_type, {})
+
+        # Get default config for task type
+        config = defaults.get(task_type, {}).copy()
+
+        # Override with loaded settings
+        if task_settings:
+            # Map sampling_interval_seconds to frame_interval for consistency
+            if "sampling_interval_seconds" in task_settings:
+                config["frame_interval"] = task_settings["sampling_interval_seconds"]
+            # Merge other settings
+            config.update(task_settings)
+
+        return config
