@@ -57,6 +57,7 @@ async def process_ml_task(
     session = None
     try:
         logger.info(f"🚀 Dequeued task {task_id} ({task_type}) for video {video_id}")
+        logger.debug(f"📋 Task config {task_id}: {config}")
 
         # Initialize database session
         from ..database.connection import get_scoped_db, remove_scoped_session

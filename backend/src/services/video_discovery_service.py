@@ -242,6 +242,9 @@ class VideoDiscoveryService:
 
             # Enqueue job to Redis
             try:
+                logger.info(
+                    f"Enqueueing task {task_id} ({task_type}) with config: {config}"
+                )
                 await self.job_producer.enqueue_task(
                     task_id=task_id,
                     task_type=task_type,
@@ -273,20 +276,40 @@ class VideoDiscoveryService:
         Returns:
             Dictionary with default configuration for the task type
         """
+        # Load from config/content_creator.json if available
+        config_file = (
+            Path(__file__).parent.parent.parent / "config" / "content_creator.json"
+        )
+        task_settings = {}
+
+        if config_file.exists():
+            try:
+                import json
+
+                with open(config_file) as f:
+                    config_data = json.load(f)
+                    task_settings = config_data.get("task_settings", {})
+            except Exception as e:
+                logger.warning(f"Failed to load config file: {e}")
+
         configs = {
             "object_detection": {
-                "model_name": "yolov8n.pt",
+                "model_name": task_settings.get("object_detection_model", "yolov8n.pt"),
                 "frame_interval": 30,
                 "confidence_threshold": 0.5,
                 "model_profile": "balanced",
             },
             "face_detection": {
-                "model_name": "yolov8n-face.pt",
-                "frame_interval": 30,
+                "model_name": task_settings.get(
+                    "face_detection_model", "yolov8n-face.pt"
+                ),
+                "frame_interval": task_settings.get(
+                    "face_sampling_interval_seconds", 1
+                ),
                 "confidence_threshold": 0.5,
             },
             "transcription": {
-                "model_name": "large-v3",
+                "model_name": task_settings.get("transcription_model", "large-v3"),
                 "language": None,
                 "vad_filter": True,
             },
