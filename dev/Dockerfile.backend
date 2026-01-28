@@ -1,45 +1,43 @@
 # syntax=docker/dockerfile:1.4
-# Stage 1: Copy ffmpeg from pre-built image
-FROM jrottenberg/ffmpeg:8-ubuntu as ffmpeg-builder
+# FASTEST OPTION: Uses official PyTorch image with PyTorch pre-baked
+FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
 
-# Stage 2: Build with Python 3.10 on Ubuntu
-FROM ubuntu:22.04
-
-# Install Python 3.10, pip, and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3-pip \
-    curl \
-    ca-certificates \
+    ffmpeg \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy ffmpeg binaries from the builder stage
-COPY --from=ffmpeg-builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-COPY --from=ffmpeg-builder /usr/local/bin/ffprobe /usr/local/bin/ffprobe
-
 # Install Poetry
-RUN pip install poetry
-# Ensure poetry is on PATH
+RUN pip install --no-cache-dir poetry==1.7.1
 ENV PATH="/root/.local/bin:$PATH"
 
-# Configure Poetry to create virtualenvs (needed for dev tools like pytest)
-ENV POETRY_VIRTUALENVS_CREATE=true
-ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+# CRITICAL: Disable virtualenv creation (we're in a container, it's wasteful)
+RUN poetry config virtualenvs.create false
 
 WORKDIR /app
 
-# Copy Poetry dependency files for the backend service
-COPY backend/pyproject.toml backend/poetry.lock ./
+# Copy Poetry files for dependency caching
+COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
 
-# Install dependencies
+# Update lock file after changes to pyproject.toml
+RUN poetry lock --no-update --no-root
+
+# Install dependencies with poetry
 RUN poetry install --no-root
 
-# Add virtualenv to PATH so pytest and other tools are available
-ENV PATH="/app/.venv/bin:$PATH"
+# Copy application code
+COPY ml-service/src ./src
+COPY ml-service/gunicorn.conf.py ./gunicorn.conf.py
 
-# Copy the rest of the application source code
-COPY backend/src /app/src
-COPY backend/alembic /app/alembic
-COPY backend/alembic.ini /app/alembic.ini
+# Create model cache directories
+RUN mkdir -p /models/ultralytics /models/easyocr /models/huggingface && \
+    chmod 777 /models /models/ultralytics /models/easyocr /models/huggingface
 
-# The command to run the application will be specified in docker-compose.yml
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8001/health')" || exit 1
+
+ENTRYPOINT []

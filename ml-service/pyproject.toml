@@ -18,8 +18,8 @@ easyocr = "^1.7.0"
 opencv-python = "^4.8.0"
 numpy = "^1.24"
 pillow = "^10.0"
-torch = "^2.0"
-torchvision = "^0.15"
+torch = {version = "^2.1", markers = "platform_system != 'Darwin'", extras = ["cu121"]}
+torchvision = {version = "^0.16", markers = "platform_system != 'Darwin'"}
 # Job queue
 arq = "^0.26"
 # Database
