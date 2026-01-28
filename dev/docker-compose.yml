@@ -56,6 +56,7 @@ services:
       - ../backend/alembic:/app/alembic
       - ../backend/alembic.ini:/app/alembic.ini
       - ../backend/gunicorn.conf.py:/app/gunicorn.conf.py
+      - ../backend/scripts:/app/scripts
       - ../test-videos:/media:ro
     environment:
       - PYTHONPATH=/app
