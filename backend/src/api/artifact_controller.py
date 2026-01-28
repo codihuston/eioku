@@ -212,6 +212,69 @@ async def find_within_video(
     return FindResponseSchema(matches=matches)
 
 
+@router.get("/{video_id}/tasks")
+async def get_video_tasks(
+    video_id: str,
+    session: Session = Depends(get_db),
+) -> list[dict]:
+    """Get all tasks for a video."""
+    import json
+
+    from ..database.models import Artifact as ArtifactEntity
+    from ..repositories.task_repository import SQLAlchemyTaskRepository
+
+    task_repo = SQLAlchemyTaskRepository(session)
+    tasks = task_repo.find_by_video_id(video_id)
+
+    result = []
+    for task in tasks:
+        task_dict = {
+            "task_id": str(task.task_id),
+            "video_id": str(task.video_id),
+            "task_type": task.task_type,
+            "status": task.status,
+            "created_at": (task.created_at.isoformat() if task.created_at else None),
+            "started_at": (task.started_at.isoformat() if task.started_at else None),
+            "completed_at": (
+                task.completed_at.isoformat() if task.completed_at else None
+            ),
+        }
+
+        # For transcript and OCR tasks, fetch language from artifacts
+        if task.task_type in ["transcription", "ocr"]:
+            artifact_type_map = {
+                "transcription": "transcript.segment",
+                "ocr": "ocr.text",
+            }
+            artifact_type = artifact_type_map[task.task_type]
+
+            # Query for any artifact of this type for this video
+            artifact = (
+                session.query(ArtifactEntity)
+                .filter(ArtifactEntity.asset_id == video_id)
+                .filter(ArtifactEntity.artifact_type == artifact_type)
+                .first()
+            )
+
+            if artifact:
+                try:
+                    payload = json.loads(artifact.payload_json)
+                    # Transcript uses 'language', OCR uses 'languages' (list)
+                    language = payload.get("language") or (
+                        payload.get("languages")[0]
+                        if payload.get("languages")
+                        else None
+                    )
+                    if language:
+                        task_dict["language"] = language
+                except (json.JSONDecodeError, AttributeError, IndexError, TypeError):
+                    pass
+
+        result.append(task_dict)
+
+    return result
+
+
 @router.get("/{video_id}/artifacts", response_model=list[ArtifactResponseSchema])
 async def get_artifacts(
     video_id: str,
@@ -220,6 +283,9 @@ async def get_artifacts(
         None, description="Filter by start time (milliseconds)"
     ),
     to_ms: int | None = Query(None, description="Filter by end time (milliseconds)"),
+    payload_filter: str | None = Query(
+        None, description="Filter by payload field (e.g., 'language=en')"
+    ),
     selection: str | None = Query(
         None,
         description=("Selection mode: default, pinned, latest, profile, best_quality"),
@@ -251,6 +317,16 @@ async def get_artifacts(
             video_id, type
         ) or policy_manager.get_default_policy(video_id, type)
 
+    payload_filter_dict = None
+    if payload_filter:
+        if "=" not in payload_filter:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid payload_filter format. Must be 'key=value'",
+            )
+        key, value = payload_filter.split("=", 1)
+        payload_filter_dict = {key: value}
+
     # Query artifacts
     artifacts = artifact_repo.get_by_asset(
         asset_id=video_id,
@@ -258,6 +334,7 @@ async def get_artifacts(
         start_ms=from_ms,
         end_ms=to_ms,
         selection=selection_policy,
+        payload_filters=payload_filter_dict,
     )
 
     # Convert to response schema
