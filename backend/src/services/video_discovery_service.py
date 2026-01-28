@@ -296,7 +296,7 @@ class VideoDiscoveryService:
                 "top_k": 5,
             },
             "scene_detection": {
-                "threshold": 0.4,
+                "threshold": 0.7,
                 "min_scene_length": 0.6,
             },
         }
