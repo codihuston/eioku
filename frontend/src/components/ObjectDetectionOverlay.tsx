@@ -1,25 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, RefObject } from 'react';
 
 interface BoundingBox {
-  frame: number;
   timestamp: number;
   bbox: [number, number, number, number];
   confidence: number;
-}
-
-interface FaceGroup {
-  face_id: string;
-  person_id: string | null;
-  occurrences: number;
-  confidence: number;
-  bounding_boxes: BoundingBox[];
+  label: string;
 }
 
 interface ArtifactPayload {
-  frame_index?: number;
-  timestamp_ms?: number;
+  label?: string;
   confidence?: number;
-  cluster_id?: string;
   bbox?: {
     x: number;
     y: number;
@@ -35,51 +25,36 @@ interface Artifact {
 
 interface Props {
   videoId: string;
-  videoRef: React.RefObject<HTMLVideoElement>;
-  canvasRef: React.RefObject<HTMLCanvasElement>;
+  videoRef: RefObject<HTMLVideoElement>;
+  canvasRef: RefObject<HTMLCanvasElement>;
   enabled: boolean;
   apiUrl?: string;
 }
 
-export default function FaceDetectionOverlay({
+export default function ObjectDetectionOverlay({
   videoId,
   videoRef,
   canvasRef,
   enabled,
   apiUrl = 'http://localhost:8080',
 }: Props) {
-  const [faces, setFaces] = useState<FaceGroup[]>([]);
+  const [objects, setObjects] = useState<BoundingBox[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=face.detection`)
+    fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=object.detection`)
       .then(res => res.json())
       .then((data: Artifact[]) => {
-        const faceMap = new Map<string, FaceGroup>();
+        const boxes: BoundingBox[] = [];
 
         data.forEach(artifact => {
           const payload = artifact.payload;
 
-          if (!payload.bbox) return;
-
-          const clusterId = payload.cluster_id || `face_${Math.random()}`;
-
-          if (!faceMap.has(clusterId)) {
-            faceMap.set(clusterId, {
-              face_id: clusterId,
-              person_id: null,
-              occurrences: 0,
-              confidence: payload.confidence || 0,
-              bounding_boxes: [],
-            });
-          }
-          const face = faceMap.get(clusterId)!;
-          face.occurrences += 1;
+          if (!payload.bbox || !payload.label) return;
 
           const bb = payload.bbox;
           if (
-            !bb ||
             typeof bb.x !== 'number' ||
             typeof bb.y !== 'number' ||
             typeof bb.width !== 'number' ||
@@ -95,15 +70,15 @@ export default function FaceDetectionOverlay({
             bb.y + bb.height,
           ];
 
-          face.bounding_boxes.push({
-            frame: payload.frame_index || 0,
+          boxes.push({
             timestamp: (artifact.span_start_ms || 0) / 1000,
             bbox,
             confidence: payload.confidence || 0,
+            label: payload.label,
           });
         });
 
-        setFaces(Array.from(faceMap.values()));
+        setObjects(boxes);
         setLoading(false);
       })
       .catch(err => {
@@ -112,29 +87,21 @@ export default function FaceDetectionOverlay({
       });
   }, [videoId, apiUrl]);
 
-  // Track video time and draw faces
+  // Track video time and draw objects
   useEffect(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || faces.length === 0 || !enabled) return;
+    if (!video || !canvas || objects.length === 0 || !enabled) return;
 
-    const drawFaces = (timeSeconds: number) => {
+    const drawObjects = (timeSeconds: number) => {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
       // Clear canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Find boxes for current time
-      const boxes: BoundingBox[] = [];
-
-      faces.forEach(face => {
-        face.bounding_boxes.forEach(box => {
-          if (Math.abs(box.timestamp - timeSeconds) < 1.0) {
-            boxes.push(box);
-          }
-        });
-      });
+      // Find boxes for current time (within 1 second)
+      const boxes = objects.filter(box => Math.abs(box.timestamp - timeSeconds) < 1.0);
 
       // Draw boxes
       boxes.forEach(box => {
@@ -152,33 +119,34 @@ export default function FaceDetectionOverlay({
         const scaledHeight = height * scaleY;
 
         // Color based on confidence
-        let color = 'rgba(0, 255, 0, 0.8)'; // green
+        let color = 'rgba(0, 150, 255, 0.8)'; // blue
         if (box.confidence < 0.5) {
-          color = 'rgba(255, 0, 0, 0.8)'; // red
+          color = 'rgba(255, 100, 0, 0.8)'; // orange
         } else if (box.confidence < 0.7) {
-          color = 'rgba(255, 255, 0, 0.8)'; // yellow
+          color = 'rgba(255, 200, 0, 0.8)'; // yellow
         }
 
         // Draw box
         ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.strokeRect(scaledX, scaledY, scaledWidth, scaledHeight);
 
-        // Draw confidence label
+        // Draw label and confidence
         ctx.fillStyle = color;
-        ctx.font = '14px Arial';
-        ctx.fillText(`${(box.confidence * 100).toFixed(1)}%`, scaledX, scaledY - 5);
+        ctx.font = 'bold 12px Arial';
+        const label = `${box.label} ${(box.confidence * 100).toFixed(0)}%`;
+        ctx.fillText(label, scaledX, scaledY - 5);
       });
     };
 
     const handleTimeUpdate = () => {
-      drawFaces(video.currentTime);
+      drawObjects(video.currentTime);
     };
 
     const handleLoadedMetadata = () => {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      drawFaces(video.currentTime);
+      drawObjects(video.currentTime);
     };
 
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -188,21 +156,21 @@ export default function FaceDetectionOverlay({
     if (video.readyState >= 1) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      drawFaces(video.currentTime);
+      drawObjects(video.currentTime);
     }
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, [videoRef, canvasRef, faces, enabled]);
+  }, [videoRef, canvasRef, objects, enabled]);
 
   if (loading) {
     return null;
   }
 
   if (error) {
-    console.error('Face detection error:', error);
+    console.error('Object detection error:', error);
     return null;
   }
 
