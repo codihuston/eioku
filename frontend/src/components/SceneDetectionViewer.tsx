@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface Artifact {
   artifact_id: string;
@@ -15,11 +15,11 @@ interface Scene {
 
 interface Props {
   videoId: string;
+  videoRef?: React.RefObject<HTMLVideoElement>;
   apiUrl?: string;
 }
 
-export default function SceneDetectionViewer({ videoId, apiUrl = 'http://localhost:8080' }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+export default function SceneDetectionViewer({ videoId, videoRef, apiUrl = 'http://localhost:8080' }: Props) {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export default function SceneDetectionViewer({ videoId, apiUrl = 'http://localho
 
   // Update current scene index when video time changes
   useEffect(() => {
-    const video = videoRef.current;
+    const video = videoRef?.current;
     if (!video || scenes.length === 0) return;
 
     const handleTimeUpdate = () => {
@@ -63,26 +63,14 @@ export default function SceneDetectionViewer({ videoId, apiUrl = 'http://localho
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     return () => video.removeEventListener('timeupdate', handleTimeUpdate);
-  }, [scenes]);
+  }, [scenes, videoRef]);
 
   const jumpToScene = (index: number) => {
-    if (videoRef.current && scenes[index]) {
+    if (videoRef?.current && scenes[index]) {
       const targetTime = scenes[index].span_start_ms / 1000;
       videoRef.current.currentTime = targetTime;
       videoRef.current.play();
       setCurrentSceneIndex(index);
-    }
-  };
-
-  const jumpNext = () => {
-    if (currentSceneIndex < scenes.length - 1) {
-      jumpToScene(currentSceneIndex + 1);
-    }
-  };
-
-  const jumpPrev = () => {
-    if (currentSceneIndex > 0) {
-      jumpToScene(currentSceneIndex - 1);
     }
   };
 
@@ -100,98 +88,44 @@ export default function SceneDetectionViewer({ videoId, apiUrl = 'http://localho
   };
 
   if (loading) {
-    return <div style={{ padding: '20px' }}>Loading scene detection data...</div>;
+    return <div style={{ padding: '20px', fontSize: '14px', color: '#999' }}>Loading scenes...</div>;
   }
 
   if (error) {
-    return <div style={{ padding: '20px', color: 'red' }}>Error: {error}</div>;
+    return <div style={{ padding: '20px', color: '#ff6b6b' }}>Error: {error}</div>;
   }
 
   if (scenes.length === 0) {
-    return <div style={{ padding: '20px' }}>No scenes detected for this video</div>;
+    return <div style={{ padding: '20px', fontSize: '14px', color: '#999' }}>No scenes detected</div>;
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <h2>Scene Detection Viewer</h2>
-
-      <div style={{ marginBottom: '20px' }}>
-        <p><strong>Video ID:</strong> {videoId}</p>
-        <p><strong>Total Scenes:</strong> {scenes.length}</p>
-        <p><strong>Current Scene:</strong> {currentSceneIndex + 1} / {scenes.length}</p>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <video
-          ref={videoRef}
-          controls
-          style={{
-            width: '100%',
-            maxWidth: '800px',
-            display: 'block',
-            backgroundColor: '#000'
-          }}
-          src={`${apiUrl}/api/v1/videos/${videoId}/stream`}
-        />
-      </div>
-
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
-        <button
-          onClick={jumpPrev}
-          disabled={currentSceneIndex === 0}
-          style={{
-            padding: '10px 20px',
-            fontSize: '16px',
-            cursor: currentSceneIndex === 0 ? 'not-allowed' : 'pointer',
-            opacity: currentSceneIndex === 0 ? 0.5 : 1
-          }}
-        >
-          ← Previous Scene
-        </button>
-
-        <button
-          onClick={jumpNext}
-          disabled={currentSceneIndex === scenes.length - 1}
-          style={{
-            padding: '10px 20px',
-            fontSize: '16px',
-            cursor: currentSceneIndex === scenes.length - 1 ? 'not-allowed' : 'pointer',
-            opacity: currentSceneIndex === scenes.length - 1 ? 0.5 : 1
-          }}
-        >
-          Next Scene →
-        </button>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <h3>Scene List</h3>
-        <div style={{
-          maxHeight: '400px',
-          overflowY: 'auto',
-          border: '1px solid #ccc',
-          borderRadius: '4px'
-        }}>
-          {scenes.map((scene, index) => (
-            <div
-              key={scene.artifact_id}
-              onClick={() => jumpToScene(index)}
-              style={{
-                padding: '10px',
-                borderBottom: '1px solid #eee',
-                cursor: 'pointer',
-                backgroundColor: index === currentSceneIndex ? '#e3f2fd' : 'transparent',
-                fontWeight: index === currentSceneIndex ? 'bold' : 'normal'
-              }}
-            >
-              <div>
-                Scene {index + 1}: {formatTime(scene.span_start_ms)} - {formatTime(scene.span_end_ms)}
-              </div>
-              <div style={{ fontSize: '12px', color: '#666' }}>
-                Duration: {formatTime(scene.duration_ms)}
-              </div>
+    <div style={{ padding: '20px' }}>
+      <div style={{
+        maxHeight: '600px',
+        overflowY: 'auto',
+      }}>
+        {scenes.map((scene, index) => (
+          <div
+            key={scene.artifact_id}
+            onClick={() => jumpToScene(index)}
+            style={{
+              padding: '12px',
+              borderBottom: '1px solid #333',
+              cursor: 'pointer',
+              backgroundColor: index === currentSceneIndex ? '#2a4a6a' : 'transparent',
+              fontWeight: index === currentSceneIndex ? '600' : '400',
+              transition: 'background-color 0.2s',
+            }}
+          >
+            <div style={{ color: '#fff' }}>
+              Scene {index + 1}: {formatTime(scene.span_start_ms)} - {formatTime(scene.span_end_ms)}
             </div>
-          ))}
-        </div>
+            <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+              Duration: {formatTime(scene.duration_ms)}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

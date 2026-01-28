@@ -1,101 +1,32 @@
 import { useState } from 'react';
-import SceneDetectionViewer from './components/SceneDetectionViewer';
-import FaceDetectionViewer from './components/FaceDetectionViewer';
+import VideoGallery from './components/VideoGallery';
+import VideoPlayer from './components/VideoPlayer';
 
 function App() {
-  const [view, setView] = useState<'home' | 'scenes' | 'faces'>('home');
-  const [videoId, setVideoId] = useState('');
-  const [inputVideoId, setInputVideoId] = useState('');
+  const [view, setView] = useState<'gallery' | 'player'>('gallery');
+  const [selectedVideoId, setSelectedVideoId] = useState('');
 
-  const handleViewScenes = () => {
-    if (inputVideoId.trim()) {
-      setVideoId(inputVideoId);
-      setView('scenes');
-    }
+  const handleSelectVideo = (videoId: string) => {
+    setSelectedVideoId(videoId);
+    setView('player');
   };
 
-  const handleViewFaces = () => {
-    if (inputVideoId.trim()) {
-      setVideoId(inputVideoId);
-      setView('faces');
-    }
+  const handleBack = () => {
+    setSelectedVideoId('');
+    setView('gallery');
   };
 
-  if (view === 'scenes' && videoId) {
-    return (
-      <div>
-        <button onClick={() => setView('home')} style={{ margin: '10px' }}>
-          ← Back to Home
-        </button>
-        <SceneDetectionViewer videoId={videoId} />
-      </div>
-    );
-  }
-
-  if (view === 'faces' && videoId) {
-    return (
-      <div>
-        <button onClick={() => setView('home')} style={{ margin: '10px' }}>
-          ← Back to Home
-        </button>
-        <FaceDetectionViewer videoId={videoId} />
-      </div>
-    );
+  if (view === 'player' && selectedVideoId) {
+    return <VideoPlayer videoId={selectedVideoId} onBack={handleBack} />;
   }
 
   return (
-    <div style={{ padding: '40px', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>Eioku</h1>
-      <p>Semantic Video Search Platform</p>
-
-      <div style={{ marginTop: '40px', padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
-        <h2>Video Viewers</h2>
-        
-        <div style={{ marginBottom: '20px' }}>
-          <label>
-            Video ID:
-            <input
-              type="text"
-              value={inputVideoId}
-              onChange={(e) => setInputVideoId(e.target.value)}
-              placeholder="Enter video ID"
-              style={{
-                marginLeft: '10px',
-                padding: '8px',
-                width: '300px',
-                fontSize: '14px'
-              }}
-            />
-          </label>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={handleViewScenes}
-            disabled={!inputVideoId.trim()}
-            style={{
-              padding: '10px 20px',
-              fontSize: '16px',
-              cursor: inputVideoId.trim() ? 'pointer' : 'not-allowed',
-              opacity: inputVideoId.trim() ? 1 : 0.5
-            }}
-          >
-            View Scenes
-          </button>
-          <button
-            onClick={handleViewFaces}
-            disabled={!inputVideoId.trim()}
-            style={{
-              padding: '10px 20px',
-              fontSize: '16px',
-              cursor: inputVideoId.trim() ? 'pointer' : 'not-allowed',
-              opacity: inputVideoId.trim() ? 1 : 0.5
-            }}
-          >
-            View Faces
-          </button>
-        </div>
+    <div style={{ minHeight: '100vh', backgroundColor: '#fff' }}>
+      <div style={{ padding: '20px', borderBottom: '1px solid #eee' }}>
+        <h1 style={{ margin: '0 0 5px 0', fontSize: '28px' }}>Eioku</h1>
+        <p style={{ margin: '0', color: '#666', fontSize: '14px' }}>Semantic Video Search Platform</p>
       </div>
+      <VideoGallery onSelectVideo={handleSelectVideo} />
     </div>
   );
 }
