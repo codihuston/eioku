@@ -473,7 +473,7 @@ def test_jump_next_boundary_case(jump_service, artifact_repo, test_video):
 
 
 def test_jump_prev_boundary_case(jump_service, artifact_repo, test_video):
-    """Test jumping prev from exact artifact end time."""
+    """Test jumping prev from within an artifact doesn't return that artifact."""
     artifact1 = create_transcript_artifact("t1", test_video.video_id, 0, 1000, "First")
     artifact2 = create_transcript_artifact(
         "t2", test_video.video_id, 1000, 2000, "Second"
@@ -482,9 +482,9 @@ def test_jump_prev_boundary_case(jump_service, artifact_repo, test_video):
     artifact_repo.create(artifact1)
     artifact_repo.create(artifact2)
 
-    # Jump from exactly 1000ms (should get artifact1)
+    # Jump from 1500ms (within artifact2) should get artifact1
     result = jump_service.jump_prev(
-        test_video.video_id, "transcript.segment", from_ms=1000
+        test_video.video_id, "transcript.segment", from_ms=1500
     )
 
     assert result is not None

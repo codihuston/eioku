@@ -147,8 +147,19 @@ class JumpNavigationService:
             selection=policy,
         )
 
-        # Filter to only artifacts that end before from_ms
-        artifacts = [a for a in artifacts if a.span_end_ms <= from_ms]
+        # Filter to only artifacts that end strictly before from_ms
+        # Using < instead of <= prevents returning the same artifact when
+        # jumping from a position within or at the end of that artifact
+        artifacts = [a for a in artifacts if a.span_end_ms < from_ms]
+        
+        logger.debug(
+            f"After filtering by span_end_ms < {from_ms}: "
+            f"found {len(artifacts)} artifacts"
+        )
+        for a in artifacts:
+            logger.debug(
+                f"  - artifact {a.artifact_id}: {a.span_start_ms}-{a.span_end_ms}ms"
+            )
 
         # Filter by label/cluster if specified
         filtered = self._filter_artifacts(artifacts, label, cluster_id, min_confidence)
@@ -192,11 +203,12 @@ class JumpNavigationService:
             try:
                 payload = json.loads(artifact.payload_json)
 
-                # Check confidence
-                if "confidence" in payload and payload["confidence"] < min_confidence:
+                # Check confidence (skip if confidence is None)
+                confidence = payload.get("confidence")
+                if confidence is not None and confidence < min_confidence:
                     logger.debug(
                         f"Artifact {artifact.artifact_id} filtered out: "
-                        f"confidence {payload['confidence']} < {min_confidence}"
+                        f"confidence {confidence} < {min_confidence}"
                     )
                     continue
 
