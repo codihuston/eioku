@@ -100,3 +100,32 @@ async def delete_video(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Video not found"
         )
+
+
+@router.get("/{video_id}/stream")
+async def stream_video(
+    video_id: str,
+    service: VideoService = Depends(get_video_service),
+):
+    """Stream video file."""
+    import os
+
+    from fastapi.responses import FileResponse
+
+    video = service.get_video(video_id)
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Video not found"
+        )
+
+    file_path = video.file_path
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Video file not found"
+        )
+
+    return FileResponse(
+        file_path,
+        media_type="video/mp4",
+        headers={"Accept-Ranges": "bytes"},
+    )
