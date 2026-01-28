@@ -136,13 +136,33 @@ class Reconciler:
                         f"re-enqueueing"
                     )
 
-                    # Re-enqueue the job
+                    # Fetch video to get file path
+                    from ..repositories.video_repository import SqlVideoRepository
+
+                    video_repo = SqlVideoRepository(self.session)
+                    video = video_repo.find_by_id(task.video_id)
+
+                    if not video:
+                        logger.error(
+                            f"Video {task.video_id} not found for task {task.task_id}"
+                        )
+                        continue
+
+                    # Get default config for task type
+                    from ..services.video_discovery_service import (
+                        VideoDiscoveryService,
+                    )
+
+                    discovery_service = VideoDiscoveryService(None, video_repo)
+                    config = discovery_service._get_default_config(task.task_type)
+
+                    # Re-enqueue the job with proper video path and config
                     await self.job_producer.enqueue_task(
                         task_id=task.task_id,
                         task_type=task.task_type,
                         video_id=task.video_id,
-                        video_path="",  # Path not available in task record
-                        config={},
+                        video_path=video.file_path,
+                        config=config,
                     )
 
                     reenqueued += 1
@@ -189,7 +209,27 @@ class Reconciler:
                         f"resetting to PENDING"
                     )
 
-                    # Reset to PENDING and re-enqueue
+                    # Fetch video to get file path
+                    from ..repositories.video_repository import SqlVideoRepository
+
+                    video_repo = SqlVideoRepository(self.session)
+                    video = video_repo.find_by_id(task.video_id)
+
+                    if not video:
+                        logger.error(
+                            f"Video {task.video_id} not found for task {task.task_id}"
+                        )
+                        continue
+
+                    # Get default config for task type
+                    from ..services.video_discovery_service import (
+                        VideoDiscoveryService,
+                    )
+
+                    discovery_service = VideoDiscoveryService(None, video_repo)
+                    config = discovery_service._get_default_config(task.task_type)
+
+                    # Reset to PENDING and re-enqueue with proper video path and config
                     task.status = "pending"
                     task.started_at = None
                     self.task_repo.update(task)
@@ -198,8 +238,8 @@ class Reconciler:
                         task_id=task.task_id,
                         task_type=task.task_type,
                         video_id=task.video_id,
-                        video_path="",
-                        config={},
+                        video_path=video.file_path,
+                        config=config,
                     )
 
                     synced += 1
