@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import SceneDetectionViewer from './SceneDetectionViewer';
 import FaceDetectionOverlay from './FaceDetectionViewer';
 import ObjectDetectionOverlay from './ObjectDetectionOverlay';
@@ -9,6 +9,7 @@ import TranscriptViewer from './TranscriptViewer';
 import ObjectDetectionViewer from './ObjectDetectionViewer';
 import OCRViewer from './OCRViewer';
 import PlaceDetectionViewer from './PlaceDetectionViewer';
+import MetadataViewer from './MetadataViewer';
 import JumpNavigationControl from './JumpNavigationControl';
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
   onBack: () => void;
 }
 
-type ArtifactView = 'scenes' | 'transcript' | 'objects' | 'ocr' | 'places' | 'faces';
+type ArtifactView = 'scenes' | 'transcript' | 'objects' | 'ocr' | 'places' | 'faces' | 'metadata';
 
 export default function VideoPlayer({ videoId, apiUrl = 'http://localhost:8080', onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -26,25 +27,45 @@ export default function VideoPlayer({ videoId, apiUrl = 'http://localhost:8080',
   const [showFaces, setShowFaces] = useState(false);
   const [showObjects, setShowObjects] = useState(false);
   const [showOCR, setShowOCR] = useState(false);
+  const [videoName, setVideoName] = useState<string>('');
+
+  useEffect(() => {
+    fetch(`${apiUrl}/api/v1/videos/${videoId}`)
+      .then(res => res.json())
+      .then(data => {
+        setVideoName(data.filename || 'Video');
+      })
+      .catch(err => {
+        console.error('Failed to fetch video info:', err);
+        setVideoName('Video');
+      });
+  }, [videoId, apiUrl]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#000' }}>
       {/* Header */}
       <div style={{ padding: '10px 20px', backgroundColor: '#1a1a1a', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button
-          onClick={onBack}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#333',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >
-          ← Back
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button
+            onClick={onBack}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#333',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+          >
+            ← Back
+          </button>
+          {videoName && (
+            <h2 style={{ margin: 0, color: '#fff', fontSize: '16px', fontWeight: '600' }}>
+              {videoName}
+            </h2>
+          )}
+        </div>
         <TaskStatusViewer videoId={videoId} apiUrl={apiUrl} />
       </div>
 
@@ -122,7 +143,7 @@ export default function VideoPlayer({ videoId, apiUrl = 'http://localhost:8080',
             overflowX: 'auto',
           }}
         >
-          {(['transcript', 'scenes', 'objects', 'ocr', 'places', 'faces'] as const).map(view => (
+          {(['transcript', 'scenes', 'objects', 'ocr', 'places', 'faces', 'metadata'] as const).map(view => (
             <button
               key={view}
               onClick={() => setActiveView(view)}
@@ -145,6 +166,7 @@ export default function VideoPlayer({ videoId, apiUrl = 'http://localhost:8080',
               {view === 'ocr' && 'OCR'}
               {view === 'places' && 'Places'}
               {view === 'faces' && 'Faces'}
+              {view === 'metadata' && 'Metadata'}
             </button>
           ))}
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '0', alignItems: 'center' }}>
@@ -235,6 +257,9 @@ export default function VideoPlayer({ videoId, apiUrl = 'http://localhost:8080',
           )}
           {activeView === 'faces' && (
             <FaceDetectionListViewer videoId={videoId} videoRef={videoRef} apiUrl={apiUrl} />
+          )}
+          {activeView === 'metadata' && (
+            <MetadataViewer videoId={videoId} apiUrl={apiUrl} />
           )}
         </div>
       </div>

@@ -39,8 +39,10 @@ export default function JumpNavigationControl({ videoId, videoRef, apiUrl = 'htt
         const response = await fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts`);
         const artifacts: Artifact[] = await response.json();
 
-        // Extract unique artifact types
-        const types = [...new Set(artifacts.map((a: Artifact) => a.artifact_type))];
+        // Extract unique artifact types, excluding video.metadata
+        const types = [...new Set(artifacts.map((a: Artifact) => a.artifact_type))].filter(
+          type => type !== 'video.metadata'
+        );
         setArtifactTypes(types);
         if (types.length > 0) {
           setSelectedType(types[0]);

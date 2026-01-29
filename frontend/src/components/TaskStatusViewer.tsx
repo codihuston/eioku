@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Task {
   task_id: string;
@@ -21,6 +21,9 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [openMenuTaskId, setOpenMenuTaskId] = useState<string | null>(null);
+  const [requeueing, setRequeueing] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const fetchTasks = async () => {
     try {
@@ -41,11 +44,41 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
     }
   };
 
+  const handleRequeue = async (taskId: string) => {
+    try {
+      setRequeueing(taskId);
+      const response = await fetch(`${apiUrl}/api/v1/tasks/${taskId}/retry`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to requeue task');
+      }
+      setOpenMenuTaskId(null);
+      await fetchTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to requeue task');
+    } finally {
+      setRequeueing(null);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuTaskId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   useEffect(() => {
     fetchTasks();
     const interval = setInterval(fetchTasks, 10000); // Refresh every 10 seconds
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId, apiUrl]);
 
   const getStatusColor = (status: string) => {
@@ -184,6 +217,7 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
                 borderRadius: '3px',
                 border: `1px solid ${getStatusColor(task.status)}`,
                 fontSize: '11px',
+                position: 'relative',
               }}
               title={tooltipLines.join('\n')}
             >
@@ -195,6 +229,70 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
                 {task.language && <span style={{ color: '#999', marginLeft: '4px' }}>({task.language})</span>}
               </span>
               {duration && <span style={{ color: '#999', marginLeft: '4px', fontSize: '10px' }}>({duration})</span>}
+              
+              {task.status === 'failed' && (
+                <div style={{ position: 'relative', marginLeft: '4px' }}>
+                  <button
+                    onClick={() => setOpenMenuTaskId(openMenuTaskId === task.task_id ? null : task.task_id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#999',
+                      cursor: 'pointer',
+                      padding: '0 2px',
+                      fontSize: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Task options"
+                  >
+                    ⋮
+                  </button>
+                  
+                  {openMenuTaskId === task.task_id && (
+                    <div
+                      ref={menuRef}
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        backgroundColor: '#1a1a1a',
+                        border: '1px solid #444',
+                        borderRadius: '3px',
+                        minWidth: '120px',
+                        zIndex: 1000,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      }}
+                    >
+                      <button
+                        onClick={() => handleRequeue(task.task_id)}
+                        disabled={requeueing === task.task_id}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          backgroundColor: 'transparent',
+                          color: requeueing === task.task_id ? '#666' : '#fff',
+                          border: 'none',
+                          textAlign: 'left',
+                          cursor: requeueing === task.task_id ? 'not-allowed' : 'pointer',
+                          fontSize: '12px',
+                          transition: 'background-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (requeueing !== task.task_id) {
+                            (e.target as HTMLButtonElement).style.backgroundColor = '#333';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.target as HTMLButtonElement).style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        {requeueing === task.task_id ? '⟳ Requeuing...' : '⟳ Requeue'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
