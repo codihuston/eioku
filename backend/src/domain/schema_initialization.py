@@ -3,6 +3,7 @@
 from src.domain.schema_registry import SchemaRegistry
 from src.domain.schemas import (
     FaceDetectionV1,
+    MetadataV1,
     ObjectDetectionV1,
     OCRDetectionV1,
     OcrTextV1,
@@ -49,3 +50,7 @@ def register_all_schemas() -> None:
     # Register ocr.text schemas
     if not SchemaRegistry.is_registered("ocr.text", 1):
         SchemaRegistry.register("ocr.text", 1, OcrTextV1)
+
+    # Register video.metadata schemas
+    if not SchemaRegistry.is_registered("video.metadata", 1):
+        SchemaRegistry.register("video.metadata", 1, MetadataV1)
