@@ -23,6 +23,7 @@ class TranscriptSegmentV1(BaseModel):
     """
 
     text: str = Field(..., description="Transcribed text")
+    language: str | None = Field(None, description="Detected language code")
     start_ms: int = Field(..., ge=0, description="Start time in milliseconds")
     end_ms: int = Field(..., ge=0, description="End time in milliseconds")
     confidence: float | None = Field(

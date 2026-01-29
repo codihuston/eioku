@@ -471,7 +471,9 @@ class ModelManager:
 
         Args:
             video_path: Path to video file
-            config: Configuration dict with languages, frame_interval (in seconds), etc.
+            config: Configuration dict with language or languages, frame_interval (in seconds), etc.
+                   - language (str): Single language code (preferred)
+                   - languages (list[str]): Legacy format, first language used if provided
 
         Returns:
             Dictionary with detections
@@ -482,7 +484,18 @@ class ModelManager:
 
             logger.info(f"OCR: {video_path} (GPU: {self.gpu_available})")
 
-            languages = config.get("languages", ["en"])
+            # Handle both new 'language' (singular) and legacy 'languages' (list) formats
+            language = config.get("language")
+            if language:
+                # New format: single language string
+                languages = [language]
+            else:
+                # Legacy format: list of languages
+                languages = config.get("languages", ["en"])
+                if isinstance(languages, str):
+                    languages = [languages]
+                language = languages[0] if languages else "en"
+
             frame_interval_seconds = config.get("frame_interval", 2)
 
             # Load model with explicit GPU flag
@@ -522,7 +535,7 @@ class ModelManager:
                             "timestamp_ms": timestamp_ms,
                             "text": text,
                             "confidence": confidence,
-                            "languages": languages,
+                            "language": language,
                             "polygon": [
                                 {"x": float(p[0]), "y": float(p[1])} for p in bbox
                             ],
@@ -538,7 +551,7 @@ class ModelManager:
             cap.release()
 
             logger.info(f"✅ OCR complete: {len(detections)} detections")
-            return {"detections": detections}
+            return {"detections": detections, "language": language}
 
         except Exception as e:
             logger.error(f"OCR failed: {e}", exc_info=True)

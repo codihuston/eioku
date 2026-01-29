@@ -273,6 +273,10 @@ async def process_ml_task(
             # Convert ArtifactEnvelope domain objects to ORM models
             orm_envelopes = []
             for envelope in envelopes:
+                # Parse payload_json string to dict for proper JSONB storage
+                # (envelope.payload_json is a JSON string, but JSONB column needs a dict)
+                payload_dict = json.loads(envelope.payload_json)
+
                 orm_envelope = Artifact(
                     artifact_id=envelope.artifact_id,
                     asset_id=envelope.asset_id,
@@ -280,7 +284,7 @@ async def process_ml_task(
                     schema_version=envelope.schema_version,
                     span_start_ms=envelope.span_start_ms,
                     span_end_ms=envelope.span_end_ms,
-                    payload_json=envelope.payload_json,
+                    payload_json=payload_dict,
                     producer=envelope.producer,
                     producer_version=envelope.producer_version,
                     model_profile=envelope.model_profile,

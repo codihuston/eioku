@@ -3,8 +3,13 @@
 from pathlib import Path
 from uuid import uuid4
 
-from ..domain.models import PathConfig, Video
+from ..domain.models import PathConfig, Task, Video
+from ..domain.task_registry import (
+    is_language_optional,
+    is_language_required,
+)
 from ..repositories.interfaces import VideoRepository
+from ..repositories.task_repository import SQLAlchemyTaskRepository
 from ..utils.print_logger import get_logger
 from .job_producer import JobProducer
 from .path_config_manager import PathConfigManager
@@ -12,8 +17,8 @@ from .path_config_manager import PathConfigManager
 # Configure logging
 logger = get_logger(__name__)
 
-# Task types to auto-create for each discovered video
-TASK_TYPES = [
+# Active task types (subset of TASK_REGISTRY that are currently enabled)
+ACTIVE_TASK_TYPES = [
     "object_detection",
     "face_detection",
     "transcription",
@@ -173,7 +178,10 @@ class VideoDiscoveryService:
         This method:
         1. Checks if video already exists in database
         2. Creates video record if new
-        3. Auto-creates 6 tasks (one for each ML operation) in PostgreSQL
+        3. Auto-creates tasks based on language configuration:
+           - OCR: One task per configured language (required)
+           - Transcription: NULL (auto-detect) or one per language (optional)
+           - Others: Single task with NULL language
         4. Enqueues tasks to appropriate queues via JobProducer
 
         Args:
@@ -207,65 +215,157 @@ class VideoDiscoveryService:
                 raise ValueError(f"Failed to create video record for: {video_path}")
             logger.info(f"Created video record: {video.video_id}")
 
-        # Auto-create tasks for all ML operations
-        from ..domain.models import Task
-        from ..repositories.task_repository import SQLAlchemyTaskRepository
-
         task_repo = SQLAlchemyTaskRepository(self.video_repository.session)
 
-        for task_type in TASK_TYPES:
-            task_id = str(uuid4())
-
+        for task_type in ACTIVE_TASK_TYPES:
             # Get default config for task type
             config = self._get_default_config(task_type)
 
-            # Create task record in PostgreSQL
-            task = Task(
-                task_id=task_id,
-                video_id=video.video_id,
-                task_type=task_type,
-                status="pending",
-                priority=1,
-            )
-            try:
-                task_repo.save(task)
-                logger.info(
-                    f"Created task record {task_id} ({task_type}) for "
-                    f"video {video.video_id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to create task record {task_id} ({task_type}): {e}",
-                    exc_info=True,
-                )
-                raise
-
-            # Enqueue job to Redis
-            try:
-                logger.info(
-                    f"Enqueueing task {task_id} ({task_type}) with config: {config}"
-                )
-                await self.job_producer.enqueue_task(
-                    task_id=task_id,
-                    task_type=task_type,
-                    video_id=video.video_id,
+            if is_language_required(task_type):
+                # OCR: Create one task per configured language
+                languages = config.get("languages", ["en"])
+                for lang in languages:
+                    await self._create_task_if_not_exists(
+                        task_repo=task_repo,
+                        video=video,
+                        video_path=video_path,
+                        task_type=task_type,
+                        language=lang,
+                        config=config,
+                    )
+            elif is_language_optional(task_type):
+                # Transcription: Check if languages are configured
+                languages = config.get("languages")
+                if languages and isinstance(languages, list) and len(languages) > 0:
+                    # Create one task per configured language
+                    for lang in languages:
+                        await self._create_task_if_not_exists(
+                            task_repo=task_repo,
+                            video=video,
+                            video_path=video_path,
+                            task_type=task_type,
+                            language=lang,
+                            config=config,
+                        )
+                else:
+                    # Auto-detect mode: single task with NULL language
+                    await self._create_task_if_not_exists(
+                        task_repo=task_repo,
+                        video=video,
+                        video_path=video_path,
+                        task_type=task_type,
+                        language=None,
+                        config=config,
+                    )
+            else:
+                # Language-agnostic tasks (face_detection, object_detection, etc.)
+                await self._create_task_if_not_exists(
+                    task_repo=task_repo,
+                    video=video,
                     video_path=video_path,
+                    task_type=task_type,
+                    language=None,
                     config=config,
                 )
-                logger.info(
-                    f"Enqueued task {task_id} ({task_type}) for video {video.video_id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to enqueue task {task_id} ({task_type}): {e}",
-                    exc_info=True,
-                )
-                raise
 
         logger.info(
             f"Successfully discovered and queued all tasks for video {video.video_id}"
         )
         return video.video_id
+
+    async def _create_task_if_not_exists(
+        self,
+        task_repo: SQLAlchemyTaskRepository,
+        video: Video,
+        video_path: str,
+        task_type: str,
+        language: str | None,
+        config: dict,
+    ) -> bool:
+        """Create a task if it doesn't already exist.
+
+        Args:
+            task_repo: Task repository instance
+            video: Video domain object
+            video_path: Path to video file
+            task_type: Type of task to create
+            language: Language for the task (None for language-agnostic)
+            config: Configuration dictionary for the task
+
+        Returns:
+            True if task was created, False if it already existed
+        """
+        # Check if task already exists for this video, type, and language
+        existing_task = task_repo.find_by_video_type_language(
+            video.video_id, task_type, language
+        )
+        if existing_task:
+            lang_str = f" ({language})" if language else ""
+            logger.info(
+                f"Task already exists for video {video.video_id} "
+                f"({task_type}{lang_str}), skipping creation"
+            )
+            return False
+
+        task_id = str(uuid4())
+
+        # Build task-specific config with language
+        task_config = config.copy()
+        if language:
+            # For OCR: use singular 'language' key
+            task_config["language"] = language
+            # Remove languages list to avoid confusion
+            task_config.pop("languages", None)
+
+        # Create task record in PostgreSQL
+        task = Task(
+            task_id=task_id,
+            video_id=video.video_id,
+            task_type=task_type,
+            language=language,
+            status="pending",
+            priority=1,
+        )
+        try:
+            task_repo.save(task)
+            lang_str = f" ({language})" if language else ""
+            logger.info(
+                f"Created task record {task_id} ({task_type}{lang_str}) for "
+                f"video {video.video_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to create task record {task_id} ({task_type}): {e}",
+                exc_info=True,
+            )
+            raise
+
+        # Enqueue job to Redis
+        try:
+            lang_str = f" ({language})" if language else ""
+            logger.info(
+                f"Enqueueing task {task_id} ({task_type}{lang_str}) "
+                f"with config: {task_config}"
+            )
+            await self.job_producer.enqueue_task(
+                task_id=task_id,
+                task_type=task_type,
+                video_id=video.video_id,
+                video_path=video_path,
+                config=task_config,
+            )
+            logger.info(
+                f"Enqueued task {task_id} ({task_type}{lang_str}) "
+                f"for video {video.video_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to enqueue task {task_id} ({task_type}): {e}",
+                exc_info=True,
+            )
+            raise
+
+        return True
 
     def _get_default_config(self, task_type: str) -> dict:
         """Get default configuration for task type.

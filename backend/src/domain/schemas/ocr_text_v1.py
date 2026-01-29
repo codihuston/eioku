@@ -20,13 +20,15 @@ class OcrTextV1(BaseModel):
 
     text: str = Field(..., description="Detected text content")
     confidence: float = Field(..., ge=0.0, le=1.0, description="OCR confidence score")
-    bounding_box: list[PolygonPoint] = Field(
+    polygon: list[PolygonPoint] = Field(
         ...,
         min_length=3,
         description="Polygon points defining text bounding box",
     )
-    language: str = Field(..., description="Detected language code")
-    frame_number: int = Field(
+    languages: list[str] = Field(
+        ..., description="List of languages used for detection"
+    )
+    frame_index: int = Field(
         ..., ge=0, description="Frame number where text was detected"
     )
 

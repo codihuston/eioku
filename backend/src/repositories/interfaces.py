@@ -91,6 +91,22 @@ class TaskRepository(ABC):
         pass
 
     @abstractmethod
+    def find_by_video_type_language(
+        self, video_id: str, task_type: str, language: str | None
+    ) -> Task | None:
+        """Find a task by video ID, task type, and language.
+
+        Args:
+            video_id: Video ID to search for
+            task_type: Task type to search for
+            language: Language code (None for language-agnostic tasks)
+
+        Returns:
+            Task if found, None otherwise
+        """
+        pass
+
+    @abstractmethod
     def find_by_video_and_status(self, video_id: str, status: str) -> list[Task]:
         """Find tasks by video ID and status."""
         pass

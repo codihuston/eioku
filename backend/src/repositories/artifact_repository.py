@@ -152,6 +152,8 @@ class SqlArtifactRepository(ArtifactRepository):
         start_ms: int | None = None,
         end_ms: int | None = None,
         selection: SelectionPolicy | None = None,
+        payload_filters: dict | None = None,
+        run_id: str | None = None,
     ) -> list[ArtifactEnvelope]:
         """Get artifacts for an asset with optional filtering."""
         query = self.session.query(ArtifactEntity).filter(
@@ -166,6 +168,21 @@ class SqlArtifactRepository(ArtifactRepository):
 
         if end_ms is not None:
             query = query.filter(ArtifactEntity.span_end_ms <= end_ms)
+
+        if payload_filters:
+            for key, value in payload_filters.items():
+                if key == "languages":
+                    # Use contains operator for JSON arrays
+                    query = query.filter(
+                        ArtifactEntity.payload_json[key].op("?")(value)
+                    )
+                else:
+                    query = query.filter(
+                        ArtifactEntity.payload_json[key].astext() == value
+                    )
+
+        if run_id:
+            query = query.filter(ArtifactEntity.run_id == run_id)
 
         # Apply selection policy
         if selection:
@@ -237,6 +254,36 @@ class SqlArtifactRepository(ArtifactRepository):
             )
             query = query.filter(ArtifactEntity.run_id == subquery)
             logger.debug("Applied latest selection")
+        elif policy.mode == "latest_per_language":
+            # Get latest run_id for each unique language in the payload
+            # This is useful for OCR/transcription where each language has its own run
+            from sqlalchemy import text
+
+            # Use raw SQL for the complex window function query
+            # This finds the latest run_id for each unique language value
+            latest_runs_sql = text(
+                """
+                SELECT DISTINCT ON (payload_json->>'language')
+                    run_id
+                FROM artifacts
+                WHERE asset_id = :asset_id
+                  AND artifact_type = :artifact_type
+                ORDER BY payload_json->>'language', created_at DESC
+            """
+            )
+
+            result = self.session.execute(
+                latest_runs_sql, {"asset_id": asset_id, "artifact_type": artifact_type}
+            )
+            latest_run_ids = [row[0] for row in result]
+
+            if latest_run_ids:
+                query = query.filter(ArtifactEntity.run_id.in_(latest_run_ids))
+                logger.debug(
+                    f"Applied latest_per_language selection: {len(latest_run_ids)} runs"
+                )
+            else:
+                logger.debug("Applied latest_per_language selection: no runs found")
         elif policy.mode == "best_quality":
             # Prefer high_quality > balanced > fast
             query = query.order_by(

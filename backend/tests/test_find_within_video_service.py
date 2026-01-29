@@ -179,14 +179,14 @@ def create_ocr_artifact(
     payload = {
         "text": text,
         "confidence": confidence,
-        "bounding_box": [
+        "polygon": [
             {"x": 0.1, "y": 0.1},
             {"x": 0.9, "y": 0.1},
             {"x": 0.9, "y": 0.9},
             {"x": 0.1, "y": 0.9},
         ],
-        "language": "en",
-        "frame_number": start_ms // 33,  # Approximate frame number
+        "languages": ["en"],
+        "frame_index": start_ms // 33,  # Approximate frame number
     }
     return ArtifactEnvelope(
         artifact_id=artifact_id,

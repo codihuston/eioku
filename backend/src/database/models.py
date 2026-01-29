@@ -38,6 +38,7 @@ class Task(Base):
     status = Column(String, nullable=False, default="pending", index=True)  # Status
     priority = Column(Integer, nullable=False, default=5)  # 1=highest, 10=lowest
     dependencies = Column(JSON)  # List of task_ids that must complete first
+    language = Column(String, nullable=True, index=True)  # ISO 639-1 language code
     created_at = Column(DateTime, server_default=func.now())
     started_at = Column(DateTime)
     completed_at = Column(DateTime)

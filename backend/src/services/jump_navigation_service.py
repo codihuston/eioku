@@ -151,7 +151,7 @@ class JumpNavigationService:
         # Using < instead of <= prevents returning the same artifact when
         # jumping from a position within or at the end of that artifact
         artifacts = [a for a in artifacts if a.span_end_ms < from_ms]
-        
+
         logger.debug(
             f"After filtering by span_end_ms < {from_ms}: "
             f"found {len(artifacts)} artifacts"

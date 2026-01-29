@@ -122,9 +122,10 @@ class TaskListResponse(BaseModel):
                 "tasks": [
                     {
                         "task_id": "550e8400-e29b-41d4-a716-446655440000",
-                        "task_type": "object_detection",
+                        "task_type": "ocr",
                         "status": "completed",
                         "video_id": "550e8400-e29b-41d4-a716-446655440001",
+                        "language": "en",
                         "created_at": "2024-01-25T10:00:00",
                         "started_at": "2024-01-25T10:00:05",
                         "completed_at": "2024-01-25T10:05:00",
@@ -311,6 +312,7 @@ async def retry_task(
                 detail=f"Video {task.video_id} not found",
             )
 
+        from ..services.reconciliation_service import ReconciliationService
         from ..services.video_discovery_service import VideoDiscoveryService
 
         discovery_service = VideoDiscoveryService(None, video_repo)
@@ -337,6 +339,11 @@ async def retry_task(
             )
 
             logger.info(f"Retried task {task_id} with job_id {job_id}")
+
+            # Trigger reconciliation to ensure all pending tasks are processed
+            reconciliation_service = ReconciliationService(db, job_producer)
+            await reconciliation_service.run()
+            logger.info("Reconciliation triggered after task retry")
 
             return RetryTaskResponse(
                 task_id=task_id,
@@ -468,6 +475,7 @@ async def list_tasks(
                 "task_type": task.task_type,
                 "status": task.status,
                 "video_id": str(task.video_id),
+                "language": task.language,
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "started_at": task.started_at.isoformat()
                 if hasattr(task, "started_at") and task.started_at

@@ -24,6 +24,7 @@ class SQLAlchemyTaskRepository(TaskRepository):
             status=task.status,
             priority=task.priority,
             dependencies=task.dependencies,
+            language=task.language,
             created_at=task.created_at or datetime.utcnow(),
             started_at=task.started_at,
             completed_at=task.completed_at,
@@ -51,6 +52,22 @@ class SQLAlchemyTaskRepository(TaskRepository):
         entities = (
             self.session.query(TaskEntity)
             .filter(TaskEntity.status == status)
+            .order_by(TaskEntity.priority.desc(), TaskEntity.created_at.asc())
+            .all()
+        )
+        return [self._entity_to_domain(entity) for entity in entities]
+
+    def find_by_id(self, task_id: str) -> Task | None:
+        """Find task by ID."""
+        entity = (
+            self.session.query(TaskEntity).filter(TaskEntity.task_id == task_id).first()
+        )
+        return self._entity_to_domain(entity) if entity else None
+
+    def find_all(self) -> list[Task]:
+        """Find all tasks."""
+        entities = (
+            self.session.query(TaskEntity)
             .order_by(TaskEntity.priority.desc(), TaskEntity.created_at.asc())
             .all()
         )
@@ -85,6 +102,7 @@ class SQLAlchemyTaskRepository(TaskRepository):
             status=entity.status,
             priority=entity.priority,
             dependencies=entity.dependencies or [],
+            language=entity.language,
             created_at=entity.created_at,
             started_at=entity.started_at,
             completed_at=entity.completed_at,
@@ -100,6 +118,33 @@ class SQLAlchemyTaskRepository(TaskRepository):
             .all()
         )
         return [self._entity_to_domain(entity) for entity in entities]
+
+    def find_by_video_type_language(
+        self, video_id: str, task_type: str, language: str | None
+    ) -> Task | None:
+        """Find a task by video ID, task type, and language.
+
+        Args:
+            video_id: Video ID to search for
+            task_type: Task type to search for
+            language: Language code (None for language-agnostic tasks)
+
+        Returns:
+            Task if found, None otherwise
+        """
+        query = (
+            self.session.query(TaskEntity)
+            .filter(TaskEntity.video_id == video_id)
+            .filter(TaskEntity.task_type == task_type)
+        )
+
+        if language is None:
+            query = query.filter(TaskEntity.language.is_(None))
+        else:
+            query = query.filter(TaskEntity.language == language)
+
+        entity = query.first()
+        return self._entity_to_domain(entity) if entity else None
 
     def find_by_video_and_status(self, video_id: str, status: str) -> list[Task]:
         """Find tasks by video ID and status."""

@@ -1,43 +1,33 @@
 # syntax=docker/dockerfile:1.4
-# FASTEST OPTION: Uses official PyTorch image with PyTorch pre-baked
-FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
+FROM python:3.10-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Poetry
 RUN pip install --no-cache-dir poetry==1.7.1
 ENV PATH="/root/.local/bin:$PATH"
 
-# CRITICAL: Disable virtualenv creation (we're in a container, it's wasteful)
+# Disable virtualenv creation
 RUN poetry config virtualenvs.create false
 
 WORKDIR /app
 
 # Copy Poetry files for dependency caching
-COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
+COPY backend/pyproject.toml backend/poetry.lock* ./
 
-# Update lock file after changes to pyproject.toml
-RUN poetry lock --no-update --no-root
-
-# Install dependencies with poetry
+# Install dependencies
 RUN poetry install --no-root
 
-# Copy application code
-COPY ml-service/src ./src
-COPY ml-service/gunicorn.conf.py ./gunicorn.conf.py
+# Copy application code and other necessary files
+# The docker-compose.yml already mounts the src, alembic, etc. so these COPYs are for when not using compose volumes
+COPY backend/src ./src
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./
+COPY backend/gunicorn.conf.py ./
+COPY backend/scripts ./scripts
 
-# Create model cache directories
-RUN mkdir -p /models/ultralytics /models/easyocr /models/huggingface && \
-    chmod 777 /models /models/ultralytics /models/easyocr /models/huggingface
+EXPOSE 8000
 
-EXPOSE 8001
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8001/health')" || exit 1
-
-ENTRYPOINT []
+# The command is defined in docker-compose.yml

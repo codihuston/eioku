@@ -151,7 +151,14 @@ class SelectionPolicy:
         if not self.artifact_type:
             raise ValueError("artifact_type cannot be empty")
 
-        valid_modes = ["default", "pinned", "latest", "profile", "best_quality"]
+        valid_modes = [
+            "default",
+            "pinned",
+            "latest",
+            "latest_per_language",
+            "profile",
+            "best_quality",
+        ]
         if self.mode not in valid_modes:
             raise ValueError(f"mode must be one of {valid_modes}")
 

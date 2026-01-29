@@ -49,6 +49,6 @@
     "face_sampling_interval_seconds": 3.0,
     "transcription_model": "large-v3-turbo",
     "object_detection_model": "yolov8s.pt",
-    "face_detection_model": "yolov8s-face.pt"
+    "face_detection_model": "yolov8n-face.pt"
   }
 }

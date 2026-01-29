@@ -57,6 +57,7 @@ services:
       - ../backend/alembic.ini:/app/alembic.ini
       - ../backend/gunicorn.conf.py:/app/gunicorn.conf.py
       - ../backend/scripts:/app/scripts
+      - ../config:/app/config:ro
       - ../test-videos:/media:ro
     environment:
       - PYTHONPATH=/app
@@ -92,6 +93,7 @@ services:
     volumes:
       - ../ml-service/src:/app/src
       - ../ml-service/tests:/app/tests
+      - ../ml-service/categories_places365.txt:/app/ml-service/categories_places365.txt:ro
       - ../test-videos:/media:ro
       - ml_models:/models
     environment:

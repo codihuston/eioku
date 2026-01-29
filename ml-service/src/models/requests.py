@@ -71,7 +71,11 @@ class OCRRequest(BaseModel):
         default=None, description="Task ID from backend (for result tracking)"
     )
     frame_interval: int = Field(default=60, description="Process every Nth frame")
-    languages: list[str] = Field(default=["en"], description="Languages to detect")
+    language: str = Field(default="en", description="Language to detect (ISO 639-1)")
+    languages: list[str] | None = Field(
+        default=None,
+        description="Deprecated: Use 'language' instead. Kept for backwards compatibility.",
+    )
     use_gpu: bool = Field(default=True, description="Use GPU for inference")
 
 

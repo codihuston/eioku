@@ -117,3 +117,27 @@ class ProfilesResponseSchema(BaseModel):
     video_id: str = Field(..., description="Video ID")
     artifact_type: str = Field(..., description="Artifact type")
     profiles: list[ProfileInfoSchema] = Field(..., description="Available profiles")
+
+
+class RunInfoSchema(BaseModel):
+    """Schema for run information."""
+
+    run_id: str = Field(..., description="Run ID")
+    created_at: datetime = Field(..., description="Creation timestamp of the run")
+    artifact_count: int = Field(
+        ..., description="Number of artifacts produced in this run"
+    )
+    model_profile: str | None = Field(
+        None, description="Model profile used for this run"
+    )
+    language: str | None = Field(
+        None, description="Language of artifacts in this run (if applicable)"
+    )
+
+
+class RunsResponseSchema(BaseModel):
+    """Schema for runs endpoint response."""
+
+    video_id: str = Field(..., description="Video ID")
+    artifact_type: str = Field(..., description="Artifact type")
+    runs: list[RunInfoSchema] = Field(..., description="Available runs")

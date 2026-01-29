@@ -51,16 +51,16 @@
       "confidence_threshold": 0.5
     },
     "face_detection": {
-      "model_name": "yolov8s-face.pt",
+      "model_name": "yolov8n-face.pt",
       "sampling_interval_seconds": 3.0,
       "confidence_threshold": 0.7
     },
     "ocr": {
-      "sampling_interval_seconds": 2.0,
+      "sampling_interval_seconds": 3.0,
       "languages": ["en", "ja"]
     },
     "place_detection": {
-      "sampling_interval_seconds": 2.0,
+      "sampling_interval_seconds": 3.0,
       "top_k": 5
     },
     "transcription": {

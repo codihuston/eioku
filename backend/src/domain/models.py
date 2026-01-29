@@ -79,6 +79,7 @@ class Task:
         status: str = "pending",
         priority: int = 1,
         dependencies: list[str] | None = None,
+        language: str | None = None,
         created_at: datetime | None = None,
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
@@ -90,6 +91,7 @@ class Task:
         self.status = status
         self.priority = priority
         self.dependencies = dependencies or []
+        self.language = language
         self.created_at = created_at or datetime.utcnow()
         self.started_at = started_at
         self.completed_at = completed_at
