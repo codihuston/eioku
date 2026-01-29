@@ -38,7 +38,7 @@ This document specifies the requirements for separating the monolithic Eioku bac
 
 ### Requirement 2: Worker Service Job Consumption & Result Polling
 
-**User Story:** As a system operator, I want the Worker Service to consume jobs from Redis and poll for results, so that ML tasks execute asynchronously without blocking the Worker on long TCP connections.
+**User Story:** As a system operator, I want the Worker Service to consume jobs from Redis, poll for ML results from Redis, and transform them into artifacts, so that ML tasks execute asynchronously and the ML Service remains stateless.
 
 #### Acceptance Criteria
 
@@ -49,34 +49,40 @@ This document specifies the requirements for separating the monolithic Eioku bac
 5. WHEN the Worker_Service starts, THE Worker_Service SHALL connect to Redis and begin consuming jobs from the appropriate queue
 6. WHEN a job is consumed, THE Worker_Service SHALL update the corresponding task status to RUNNING in PostgreSQL
 7. WHEN a job is consumed, THE Worker_Service SHALL enqueue the job to the ml_jobs queue for the ML_Service to process
-8. WHEN a job is enqueued to ml_jobs, THE Worker_Service SHALL poll PostgreSQL for artifact completion (checking artifacts table for task_id)
-9. WHEN artifacts are detected in PostgreSQL for the task, THE Worker_Service SHALL verify all expected artifacts are present
-10. WHEN all artifacts are present, THE Worker_Service SHALL update the task status to COMPLETED in PostgreSQL
-11. WHEN the Worker_Service completes a job, THE Worker_Service SHALL acknowledge the job in Redis (XACK)
-12. THE Worker_Service SHALL support configurable concurrency (max_jobs parameter)
-13. THE Worker_Service SHALL NOT expose HTTP endpoints (no REST API)
-14. WHEN the Worker_Service starts, THE Worker_Service SHALL establish connection pool to PostgreSQL (max_size=10)
-15. WHEN polling for results, THE Worker_Service SHALL use exponential backoff to avoid excessive database queries
-16. WHEN polling timeout is exceeded, THE Worker_Service SHALL mark task as FAILED and allow arq to retry
+8. WHEN a job is enqueued to ml_jobs, THE Worker_Service SHALL poll Redis for result completion (checking key "ml_result:{task_id}")
+9. WHEN results are detected in Redis for the task, THE Worker_Service SHALL deserialize the JSON results
+10. WHEN results are deserialized, THE Worker_Service SHALL transform them into ArtifactEnvelopes (extract individual detections/segments)
+11. WHEN ArtifactEnvelopes are created, THE Worker_Service SHALL batch insert all artifacts to PostgreSQL in a single transaction
+12. WHEN artifacts are inserted successfully, THE Worker_Service SHALL delete the Redis result key
+13. WHEN artifacts are inserted successfully, THE Worker_Service SHALL update the task status to COMPLETED in PostgreSQL
+14. WHEN the Worker_Service completes a job, THE Worker_Service SHALL acknowledge the job in Redis (XACK)
+15. THE Worker_Service SHALL support configurable concurrency (max_jobs parameter)
+16. THE Worker_Service SHALL NOT expose HTTP endpoints (no REST API)
+17. WHEN the Worker_Service starts, THE Worker_Service SHALL establish connection pool to PostgreSQL (max_size=10)
+18. WHEN polling for results, THE Worker_Service SHALL use exponential backoff to avoid excessive Redis queries
+19. WHEN polling timeout is exceeded, THE Worker_Service SHALL mark task as FAILED and allow arq to retry
+20. WHEN Redis result key expires (30 minutes), THE Worker_Service SHALL detect missing result and mark task as FAILED
 
-### Requirement 3: ML Service Job Consumption & Result Persistence
+### Requirement 3: ML Service Job Consumption & Result Persistence to Redis
 
-**User Story:** As an ML Service, I want to consume inference jobs from a shared Redis queue and persist results to PostgreSQL, so that I can process ML tasks asynchronously without blocking the Worker Service.
+**User Story:** As an ML Service, I want to consume inference jobs from a shared Redis queue and persist results to Redis, so that I remain stateless and the Worker Service can handle transformation and persistence.
 
 #### Acceptance Criteria
 
 1. WHEN the ML_Service starts, THE ML_Service SHALL connect to Redis and begin consuming jobs from the ml_jobs queue
 2. WHEN the ML_Service consumes a job, THE ML_Service SHALL read task_id, task_type, video_id, video_path, and config from the job payload
 3. WHEN the ML_Service processes a job, THE ML_Service SHALL execute the appropriate ML inference (object detection, face detection, etc.)
-4. WHEN the ML_Service completes inference, THE ML_Service SHALL create ArtifactEnvelopes with detections/classifications and provenance metadata
-5. WHEN the ML_Service creates artifacts, THE ML_Service SHALL include config_hash, input_hash, run_id, producer, and model_profile in each envelope
-6. WHEN the ML_Service completes a job, THE ML_Service SHALL batch insert all ArtifactEnvelopes to PostgreSQL in a single transaction
-7. WHEN artifacts are inserted successfully, THE ML_Service SHALL acknowledge the job in Redis (XACK)
-8. WHEN inference fails, THE ML_Service SHALL NOT acknowledge the job (allow arq to retry)
-9. THE ML_Service SHALL expose GET /health endpoint returning model status and GPU availability
-10. WHEN the ML_Service starts, THE ML_Service SHALL lazy-load ML models on first request to that endpoint
-11. THE ML_Service SHALL NOT expose inference HTTP endpoints (no /infer/* endpoints)
-12. THE ML_Service SHALL NOT call Worker Service or any other service
+4. WHEN the ML_Service completes inference, THE ML_Service SHALL serialize results to JSON (Detection, Segment, Classification, Scene objects)
+5. WHEN the ML_Service serializes results, THE ML_Service SHALL include config_hash, input_hash, run_id, producer, and model_profile in the result envelope
+6. WHEN the ML_Service completes a job, THE ML_Service SHALL store results in Redis with key format "ml_result:{task_id}"
+7. WHEN the ML_Service stores results, THE ML_Service SHALL set TTL to 1800 seconds (30 minutes) for automatic cleanup
+8. WHEN results are stored successfully, THE ML_Service SHALL acknowledge the job in Redis (XACK)
+9. WHEN inference fails, THE ML_Service SHALL NOT acknowledge the job (allow arq to retry)
+10. THE ML_Service SHALL expose GET /health endpoint returning model status and GPU availability
+11. WHEN the ML_Service starts, THE ML_Service SHALL lazy-load ML models on first request to that endpoint
+12. THE ML_Service SHALL NOT expose inference HTTP endpoints (no /infer/* endpoints)
+13. THE ML_Service SHALL NOT call Worker Service or any other service
+14. THE ML_Service SHALL NOT write to PostgreSQL (stateless operation)
 
 ### Requirement 4: Job Queue & Redis Integration
 
@@ -335,27 +341,30 @@ This document specifies the requirements for separating the monolithic Eioku bac
 
 ### Requirement 21: Artifact Envelope Transformation
 
-**User Story:** As a Worker Service, I want to transform ML responses into ArtifactEnvelopes, so that results are persisted in the correct format.
+**User Story:** As a Worker Service, I want to transform ML responses from Redis into ArtifactEnvelopes, so that results are persisted in the correct format with proper provenance metadata.
 
 #### Acceptance Criteria
 
-1. WHEN the Worker_Service receives ML response, THE Worker_Service SHALL extract individual detections/segments from the batch response
-2. FOR each detection/segment, THE Worker_Service SHALL create an ArtifactEnvelope with artifact_type, span_start_ms, span_end_ms, and payload_json
-3. WHEN creating ArtifactEnvelope, THE Worker_Service SHALL copy config_hash, input_hash, producer, producer_version, model_profile, and run_id from ML response
-4. WHEN creating ArtifactEnvelope, THE Worker_Service SHALL set payload_json to contain the individual detection/segment data
-5. WHEN the Worker_Service persists artifacts, THE Worker_Service SHALL batch insert all ArtifactEnvelopes for a task in a single transaction
-6. THE ArtifactEnvelope transformation logic SHALL be defined in Worker_Service
+1. WHEN the Worker_Service receives ML result from Redis, THE Worker_Service SHALL deserialize the JSON result
+2. WHEN the Worker_Service deserializes results, THE Worker_Service SHALL extract individual detections/segments from the batch response
+3. FOR each detection/segment, THE Worker_Service SHALL create an ArtifactEnvelope with artifact_type, span_start_ms, span_end_ms, and payload_json
+4. WHEN creating ArtifactEnvelope, THE Worker_Service SHALL copy config_hash, input_hash, producer, producer_version, model_profile, and run_id from ML result
+5. WHEN creating ArtifactEnvelope, THE Worker_Service SHALL set payload_json to contain the individual detection/segment data (validated against schema)
+6. WHEN the Worker_Service persists artifacts, THE Worker_Service SHALL batch insert all ArtifactEnvelopes for a task in a single transaction
+7. WHEN artifacts are inserted successfully, THE Worker_Service SHALL delete the Redis result key (ml_result:{task_id})
+8. THE ArtifactEnvelope transformation logic SHALL be defined in Worker_Service
+9. THE Worker_Service SHALL validate payload_json against artifact schema models before persistence
 
 ### Requirement 22: Artifact Payload Schema Validation
 
-**User Story:** As an API Service, I want to validate artifact payloads, so that data integrity is maintained in the database.
+**User Story:** As a Worker Service, I want to validate artifact payloads before persistence, so that data integrity is maintained in the database.
 
 #### Acceptance Criteria
 
-1. THE API_Service SHALL define Pydantic schema models for each artifact type (ObjectDetectionV1, TranscriptSegmentV1, etc.)
-2. WHEN artifacts are inserted into PostgreSQL, THE API_Service SHALL validate payload_json against the corresponding schema model
-3. WHEN payload_json validation fails, THE API_Service SHALL reject the insert and return error
+1. THE Worker_Service SHALL define Pydantic schema models for each artifact type (ObjectDetectionV1, FaceDetectionV1, TranscriptSegmentV1, OCRDetectionV1, PlaceClassificationV1, SceneV1)
+2. WHEN the Worker_Service transforms ML results into ArtifactEnvelopes, THE Worker_Service SHALL validate payload_json against the corresponding schema model
+3. WHEN payload_json validation fails, THE Worker_Service SHALL reject the artifact and mark task as FAILED with error message
 4. THE artifact schema models SHALL be defined in backend/src/domain/schemas/
-5. WHEN an artifact is queried, THE API_Service MAY deserialize payload_json using the schema model for type safety
-6. THE schema models SHALL be versioned (e.g., ObjectDetectionV1, ObjectDetectionV2) to support schema evolution
+5. THE schema models SHALL be versioned (e.g., ObjectDetectionV1, ObjectDetectionV2) to support schema evolution
+6. WHEN an artifact is queried via API, THE API_Service MAY deserialize payload_json using the schema model for type safety
 

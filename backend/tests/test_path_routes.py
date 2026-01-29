@@ -1,6 +1,6 @@
 """Test that path routes are properly registered."""
 
-from src.main import create_app
+from src.main_api import create_app
 
 
 def test_path_routes_registered():

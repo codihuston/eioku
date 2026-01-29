@@ -1,18 +1,19 @@
-"""Simple print-based logger for development."""
+"""Logger adapter that uses standard Python logging with JSON formatting."""
 
 import logging
-import sys
 
 
-def get_logger(name: str | None = None) -> logging.Logger:
-    """Get a logger instance with print-style formatting."""
-    logger = logging.getLogger(name or __name__)
+def get_logger(name: str) -> logging.Logger:
+    """Get a standard Python logger instance.
 
-    if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter("%(levelname)s [%(name)s] %(message)s")
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+    This function returns a standard logging.Logger that will use the JSON
+    formatter configured in main_api.py and main_worker.py. All logs will be
+    structured as JSON for better log aggregation and parsing.
 
-    return logger
+    Args:
+        name: Logger name (typically __name__)
+
+    Returns:
+        logging.Logger instance configured with JSON formatting
+    """
+    return logging.getLogger(name)

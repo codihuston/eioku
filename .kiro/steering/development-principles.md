@@ -99,3 +99,10 @@ Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0
 - If urgent fixes are needed, still follow approval process
 - Document any deviations from normal workflow
 - Retrospective review of emergency changes
+## Communication Standards
+
+### Summarization
+- **Do not summarize work unless explicitly asked by the user**
+- Avoid verbose recaps or lengthy summaries of completed tasks
+- Keep responses focused and concise
+- Only provide summaries when user requests them

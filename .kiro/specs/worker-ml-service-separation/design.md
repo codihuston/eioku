@@ -9,10 +9,11 @@ This document describes the architectural design for separating the monolithic E
 1. **PostgreSQL as Source of Truth**: All persistent state lives in PostgreSQL; Redis is ephemeral
 2. **Time-Free Reconciliation**: Reconciler uses definitive Redis signals, never time-based thresholds
 3. **Shared Queue Pattern**: Both Worker and ML Service consume from same Redis queues (no HTTP calls)
-4. **Result Polling**: Worker polls PostgreSQL for artifact completion instead of blocking on HTTP
-5. **Async-First Architecture**: All I/O operations use async/await for efficiency
-6. **Graceful Degradation**: Services can fail independently without cascading failures
-7. **Horizontal Scalability**: All services can scale independently via Docker Compose or Kubernetes
+4. **ML Service Stateless**: ML Service persists results to Redis (not PostgreSQL), Worker handles transformation
+5. **Result Polling**: Worker polls Redis for ML results, transforms them, then persists to PostgreSQL
+6. **Async-First Architecture**: All I/O operations use async/await for efficiency
+7. **Graceful Degradation**: Services can fail independently without cascading failures
+8. **Horizontal Scalability**: All services can scale independently via Docker Compose or Kubernetes
 
 ## Architecture
 
@@ -60,15 +61,18 @@ This document describes the architectural design for separating the monolithic E
         │  ┌──────────────────────────────────┐│  │  ┌──────────────────────────────────┐│
         │  │ arq Consumer                     ││  │  │ arq Consumer                     ││
         │  │ - Consume from gpu_jobs/cpu_jobs││  │  │ - Consume from ml_jobs queue     ││
-        │  │ - Enqueue to ml_jobs queue       ││  │  │ - Execute ML inference           ││
-        │  │ - Poll PostgreSQL for results    ││  │  │ - Create ArtifactEnvelopes       ││
-        │  │ - Update task status             ││  │  │ - Batch insert to PostgreSQL     ││
-        │  │ - Reconciliation (every 5 min)   ││  │  │ - Acknowledge job in Redis       ││
+        │  │ - Poll Redis for ML results      ││  │  │ - Execute ML inference           ││
+        │  │ - Transform to ArtifactEnvelopes ││  │  │ - Serialize results to JSON      ││
+        │  │ - Batch insert to PostgreSQL     ││  │  │ - Store in Redis (ml_result:*)   ││
+        │  │ - Delete Redis result key        ││  │  │ - Acknowledge job in Redis       ││
+        │  │ - Update task status             ││  │  │ - (No database writes)           ││
+        │  │ - Reconciliation (every 5 min)   ││  │  │                                  ││
         │  └──────────────────────────────────┘│  │  └──────────────────────────────────┘│
         │                                      │  │                                      │
         │  Connection Pool (10)                │  │  Connection Pool (10)                │
         │  Polling with exponential backoff    │  │  GPU Semaphore (concurrency=2)       │
         └──────────────────────────────────────┘  │  Model Cache (lazy-loaded)           │
+                                                   │  Result TTL: 30 minutes              │
                                                    └──────────────────────────────────────┘
 ```
 
@@ -77,8 +81,8 @@ This document describes the architectural design for separating the monolithic E
 | Service | Responsibilities | Scaling | Deployment |
 |---------|------------------|---------|------------|
 | **API Service** | REST endpoints, task orchestration, job enqueueing to gpu_jobs/cpu_jobs, artifact queries | Horizontal (stateless) | Separate container |
-| **Worker Service** | Consume from gpu_jobs/cpu_jobs, enqueue to ml_jobs, poll PostgreSQL for results, reconciliation | Horizontal (stateless) | Separate container |
-| **ML Service** | Consume from ml_jobs, execute ML inference, persist artifacts to PostgreSQL, GPU management | Horizontal (GPU-aware) | Separate container |
+| **Worker Service** | Consume from gpu_jobs/cpu_jobs, poll Redis for ML results, transform to ArtifactEnvelopes, persist to PostgreSQL, reconciliation | Horizontal (stateless) | Separate container |
+| **ML Service** | Consume from ml_jobs, execute ML inference, persist results to Redis (stateless), GPU management | Horizontal (GPU-aware) | Separate container |
 
 ### Data Flow Diagrams
 
@@ -129,7 +133,7 @@ Redis: XADD ml_jobs {task_id, task_type, video_id, video_path}
 Response: {task_id, job_id, status}
 ```
 
-#### Job Execution Flow (Shared Queue Pattern)
+#### Job Execution Flow (Shared Queue Pattern with Redis Result Passing)
 
 ```
 Worker Service: arq Consumer (gpu_jobs or cpu_jobs)
@@ -153,7 +157,7 @@ Worker Service: Enqueue to ml_jobs queue
     ▼
 Redis: ml_jobs queue now has job
     │
-    ├─ Worker Service begins polling PostgreSQL for artifacts
+    ├─ Worker Service begins polling Redis for results (key: ml_result:{task_id})
     ├─ Poll with exponential backoff (1s, 2s, 4s, 8s, etc.)
     │
     ▼
@@ -166,27 +170,30 @@ Redis: Job payload
     │
     ├─ Load model (lazy, with GPU semaphore)
     ├─ Process video
-    ├─ Create ArtifactEnvelopes with provenance
+    ├─ Serialize results to JSON (Detection, Segment, etc. objects)
     │
     ▼
-ML Service: Batch insert artifacts to PostgreSQL
+ML Service: Store results in Redis
     │
-    ├─ INSERT INTO artifacts (task_id, artifact_type, payload_json, config_hash, input_hash, ...)
-    ├─ XACK job in Redis
-    │
-    ▼
-PostgreSQL: Artifacts inserted, projections updated via triggers
+    ├─ SET ml_result:{task_id} <json_results> EX 1800 (30 minute TTL)
+    ├─ XACK job in Redis (ml_jobs)
     │
     ▼
-Worker Service: Polling detects artifacts
+Redis: Results stored with 30-minute expiration
     │
-    ├─ SELECT COUNT(*) FROM artifacts WHERE task_id = ?
-    ├─ Verify all expected artifacts present
+    ▼
+Worker Service: Polling detects results
+    │
+    ├─ GET ml_result:{task_id}
+    ├─ Deserialize JSON results
+    ├─ Transform to ArtifactEnvelopes (extract individual items)
+    ├─ Batch insert to PostgreSQL in single transaction
+    ├─ DELETE ml_result:{task_id}
     ├─ Update task status to COMPLETED
     ├─ XACK job in Redis (gpu_jobs or cpu_jobs)
     │
     ▼
-PostgreSQL: Task marked COMPLETED, started_at and completed_at recorded
+PostgreSQL: Artifacts inserted, task marked COMPLETED, projections updated via triggers
 ```
 
 #### Reconciliation Flow

@@ -17,29 +17,30 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 &
 
 # Install Poetry
 RUN pip install poetry
+# Ensure poetry is on PATH
+ENV PATH="/root/.local/bin:$PATH"
 
-# Configure Poetry to create virtualenv in a fixed location
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=0 \
-    POETRY_VIRTUALENVS_PATH=/opt/venv \
-    POETRY_CACHE_DIR=/root/.cache/pypoetry
+# Configure Poetry to install dependencies into global site-packages (not virtualenv)
+ENV POETRY_VIRTUALENVS_CREATE=false
+
+# Set CUDA library path - must be set before torch tries to load CUDA libraries
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.6/targets/x86_64-linux/lib:/usr/local/cuda-12.6/lib64:$LD_LIBRARY_PATH
 
 WORKDIR /app
 
 # Copy Poetry files only (for layer caching)
 COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
 
-# Install dependencies with BuildKit cache mount for Poetry cache only
-# The virtualenv is created at /opt/venv which stays in the image
-RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    poetry install --no-root --only main && \
-    ln -s /opt/venv/*/bin /opt/venv/bin
-
-# Add venv to PATH
-ENV PATH="/opt/venv/bin:$PATH"
+# Install dependencies (including dev tools like ruff, pytest)
+RUN poetry install --no-root
 
 # Copy application code
 COPY ml-service/src ./src
+COPY ml-service/gunicorn.conf.py ./gunicorn.conf.py
+
+# Create model cache directories with proper permissions
+RUN mkdir -p /models/ultralytics /models/easyocr /models/huggingface && \
+    chmod 777 /models /models/ultralytics /models/easyocr /models/huggingface
 
 # Expose port
 EXPOSE 8001
@@ -50,6 +51,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Override NVIDIA entrypoint to use our command
 ENTRYPOINT []
-
-# Start the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]

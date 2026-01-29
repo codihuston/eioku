@@ -3,44 +3,44 @@
 from pydantic import BaseModel, Field
 
 
-class AlternativeLabel(BaseModel):
-    """Alternative place classification with confidence."""
+class PlacePrediction(BaseModel):
+    """Place classification prediction."""
 
-    label: str = Field(..., description="Alternative place label")
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score")
+    label: str = Field(..., description="Place category label")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Prediction confidence score"
+    )
 
 
 class PlaceClassificationV1(BaseModel):
     """
-    Payload schema for place.classification artifacts.
+    Payload schema for place classification artifacts.
 
-    Represents a scene/location classification (e.g., "kitchen", "office", "beach")
-    with alternative labels and confidence scores.
+    Represents detected place/scene categories in video frames with
+    top-k predictions and confidence scores.
     """
 
-    label: str = Field(..., description="Primary place classification label")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Primary classification confidence"
-    )
-    alternative_labels: list[AlternativeLabel] = Field(
-        default_factory=list,
-        description="Alternative classifications with confidence scores",
+    predictions: list[PlacePrediction] = Field(
+        ..., min_length=1, description="Top place predictions"
     )
     frame_number: int = Field(
-        ..., ge=0, description="Frame number where classification was made"
+        ..., ge=0, description="Frame number where classification was performed"
+    )
+    top_k: int = Field(
+        default=5, ge=1, description="Number of top predictions returned"
     )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
                 {
-                    "label": "office",
-                    "confidence": 0.87,
-                    "alternative_labels": [
-                        {"label": "conference_room", "confidence": 0.65},
-                        {"label": "classroom", "confidence": 0.42},
+                    "predictions": [
+                        {"label": "beach", "confidence": 0.85},
+                        {"label": "coast", "confidence": 0.12},
+                        {"label": "ocean", "confidence": 0.02},
                     ],
                     "frame_number": 600,
+                    "top_k": 3,
                 }
             ]
         }

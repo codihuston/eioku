@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "Pre-Commit Quality & Test Hook",
+  "description": "Runs all backend tests, attempts to fix failures, lints all services, starts services if needed, generates commit message, and prompts for commit confirmation",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Execute the pre-commit workflow:\n\n1. Run backend linting using the \"Lint Backend Code\" hook\n2. Run ml-service linting using the \"Lint ML Service Code\" hook\n3. Run frontend linting using the \"Lint Frontend Code\" hook\n4. Run backend tests using the \"Run Backend Tests\" hook\n5. Run ml-service tests using the \"Run ML Service Tests\" hook\n6. If any linting or tests fail, report failures and do not proceed\n7. Once all linting and tests pass, generate a concise commit message summarizing the changes\n8. Present the commit message and ask the user if they're ready to commit\n9. If user confirms, make the commit with the generated message\n10. If user declines, cancel the commit process"
+  },
+  "workspaceFolderName": "eioku-kiro-hackathon",
+  "shortName": "pre-commit-checks"
+}

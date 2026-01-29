@@ -9,16 +9,13 @@ from sqlalchemy.orm import Session
 from ..database.connection import get_db
 from ..repositories.path_config_repository import SQLAlchemyPathConfigRepository
 from ..repositories.video_repository import SqlVideoRepository
+from ..services.job_producer import JobProducer
 from ..services.path_config_manager import PathConfigManager
-from ..services.processing_profiles import ProfileManager
 from ..services.video_discovery_service import VideoDiscoveryService
 
 logger = logging.getLogger()
 
 router = APIRouter(tags=["paths"])
-
-# Create a single ProfileManager instance that persists
-_profile_manager = None
 
 
 def get_path_config_manager(db: Session = Depends(get_db)) -> PathConfigManager:
@@ -28,19 +25,12 @@ def get_path_config_manager(db: Session = Depends(get_db)) -> PathConfigManager:
 
 
 def get_video_discovery_service(db: Session = Depends(get_db)) -> VideoDiscoveryService:
-    """Get VideoDiscoveryService instance."""
+    """Get VideoDiscoveryService instance with JobProducer for task enqueueing."""
     path_repo = SQLAlchemyPathConfigRepository(db)
     video_repo = SqlVideoRepository(db)
     path_manager = PathConfigManager(path_repo)
-    return VideoDiscoveryService(path_manager, video_repo)
-
-
-def get_profile_manager() -> ProfileManager:
-    """Get ProfileManager singleton instance."""
-    global _profile_manager
-    if _profile_manager is None:
-        _profile_manager = ProfileManager()
-    return _profile_manager
+    job_producer = JobProducer()
+    return VideoDiscoveryService(path_manager, video_repo, job_producer)
 
 
 @router.get("/paths")
@@ -81,7 +71,7 @@ async def add_path(
 async def discover_videos(
     discovery_service: VideoDiscoveryService = Depends(get_video_discovery_service),
 ):
-    """Discover videos in all configured paths."""
+    """Discover videos in all configured paths and auto-create ML tasks."""
     # Force logger level to INFO for proper logging
     logger.setLevel(logging.INFO)
 
@@ -91,39 +81,34 @@ async def discover_videos(
         discovered_videos = discovery_service.discover_videos()
         logger.info(f"Discovery completed. Found {len(discovered_videos)} videos")
 
-        # Auto-create hash tasks for discovered videos that aren't hashed yet
-        import uuid
-        from datetime import datetime
+        # Initialize JobProducer for task enqueueing
+        if not discovery_service.job_producer:
+            raise RuntimeError("JobProducer not initialized in VideoDiscoveryService")
 
-        from sqlalchemy import text
+        await discovery_service.job_producer.initialize()
 
-        hash_tasks_created = 0
+        # Auto-create and enqueue ML tasks for each discovered video
+        tasks_created = 0
         for video in discovered_videos:
             if video.status == "discovered":
-                # Create hash task
-                task_id = str(uuid.uuid4())
-                discovery_service.video_repository.session.execute(
-                    text(
-                        """
-                        INSERT INTO tasks (task_id, video_id, task_type, status, priority,
-                                          dependencies, created_at)
-                        VALUES (:task_id, :video_id, 'hash', 'pending', 1, '[]', :created_at)
-                    """  # noqa: E501
-                    ),
-                    {
-                        "task_id": task_id,
-                        "video_id": video.video_id,
-                        "created_at": datetime.utcnow(),
-                    },
-                )
-                hash_tasks_created += 1
+                try:
+                    await discovery_service.discover_and_queue_tasks(video.file_path)
+                    tasks_created += 6  # 6 tasks per video
+                    logger.info(
+                        f"Auto-created and queued 6 ML tasks for video {video.video_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to auto-create tasks for video {video.video_id}: {e}",
+                        exc_info=True,
+                    )
+                    # Continue with next video instead of failing entire discovery
 
-        discovery_service.video_repository.session.commit()
-        logger.info(f"Created {hash_tasks_created} hash tasks")
+        await discovery_service.job_producer.close()
 
         result = {
             "message": f"Discovered {len(discovered_videos)} videos",
-            "hash_tasks_created": hash_tasks_created,
+            "tasks_created": tasks_created,
             "videos": [
                 {
                     "video_id": v.video_id,
@@ -139,7 +124,6 @@ async def discover_videos(
         return result
     except Exception as e:
         logger.error(f"Discovery failed with error: {e}", exc_info=True)
-        raise
         raise HTTPException(status_code=500, detail=f"Discovery failed: {str(e)}")
 
 
@@ -164,61 +148,3 @@ async def validate_existing_videos(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
-
-
-@router.get("/profiles")
-async def list_processing_profiles(
-    profile_manager: ProfileManager = Depends(get_profile_manager),
-):
-    """List all available processing profiles."""
-    try:
-        profiles = profile_manager.list_profiles()
-        return {
-            "profiles": [
-                {"name": name, "description": description}
-                for name, description in profiles.items()
-            ]
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list profiles: {str(e)}"
-        )
-
-
-@router.get("/profiles/{profile_name}")
-async def get_processing_profile(
-    profile_name: str,
-    profile_manager: ProfileManager = Depends(get_profile_manager),
-):
-    """Get detailed configuration for a specific processing profile."""
-    try:
-        profile = profile_manager.get_profile(profile_name)
-        return profile.to_dict()
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get profile: {str(e)}")
-
-
-@router.post("/profiles/load")
-async def load_custom_profile(
-    file_data: dict,
-    profile_manager: ProfileManager = Depends(get_profile_manager),
-):
-    """Load a custom profile from provided configuration data."""
-    try:
-        file_path = file_data.get("file_path")
-        if not file_path:
-            raise ValueError("file_path is required")
-
-        profile = profile_manager.load_profile(file_path)
-        return {
-            "message": f"Successfully loaded profile '{profile.name}'",
-            "profile": profile.to_dict(),
-        }
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load profile: {str(e)}")

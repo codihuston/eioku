@@ -3,6 +3,7 @@
 .vscode
 .pytest_cache
 .ruff_cache
+.venv
 node_modules
 tmp
 *.log

@@ -18,14 +18,13 @@ class TestWorkerSettings:
         assert hasattr(settings, "job_timeout")
         assert hasattr(settings, "max_tries")
         assert hasattr(settings, "allow_abort_jobs")
-        assert hasattr(settings, "gpu_mode")
 
     def test_worker_settings_queue_name_is_jobs(self):
         """Test WorkerSettings uses single 'jobs' queue."""
         from src.workers.arq_worker import WorkerSettings
 
         settings = WorkerSettings()
-        assert settings.queue_name == "jobs"
+        assert settings.queue_name == "ml_jobs"
 
     def test_worker_settings_default_max_jobs(self):
         """Test WorkerSettings uses default max_jobs=4."""
@@ -75,21 +74,6 @@ class TestWorkerSettings:
 
         settings = WorkerSettings()
         assert settings.redis_settings.database == 0
-
-    def test_worker_settings_gpu_mode_is_string(self):
-        """Test WorkerSettings gpu_mode is a string."""
-        from src.workers.arq_worker import WorkerSettings
-
-        settings = WorkerSettings()
-        assert isinstance(settings.gpu_mode, str)
-        assert settings.gpu_mode in ("gpu", "cpu")
-
-    def test_worker_settings_functions_is_list(self):
-        """Test WorkerSettings functions is a list."""
-        from src.workers.arq_worker import WorkerSettings
-
-        settings = WorkerSettings()
-        assert isinstance(settings.functions, list)
 
     def test_worker_settings_redis_settings_type(self):
         """Test WorkerSettings redis_settings is RedisSettings."""

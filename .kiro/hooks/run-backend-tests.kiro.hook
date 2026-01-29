@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "Run Backend Tests",
+  "description": "Automatically run backend pytest tests using docker-compose when it's time to test. If the service is not running, use the start dev environment hook.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "docker-compose -f dev/docker-compose.yml exec backend pytest tests/"
+  },
+  "workspaceFolderName": "eioku-kiro-hackathon",
+  "shortName": "run-backend-tests"
+}
