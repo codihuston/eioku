@@ -1,6 +1,5 @@
 """API controller for artifact-based endpoints."""
 
-import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -400,6 +399,7 @@ async def get_available_runs(
     including artifact counts and creation timestamps.
     """
     import json
+
     artifacts = artifact_repo.get_by_asset(
         asset_id=video_id,
         artifact_type=artifact_type,

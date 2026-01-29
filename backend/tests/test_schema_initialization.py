@@ -4,6 +4,7 @@ from src.domain.schema_initialization import register_all_schemas
 from src.domain.schema_registry import SchemaRegistry
 from src.domain.schemas import (
     FaceDetectionV1,
+    MetadataV1,
     ObjectDetectionV1,
     OCRDetectionV1,
     PlaceClassificationV1,
@@ -30,6 +31,7 @@ class TestSchemaInitialization:
         assert SchemaRegistry.is_registered("face.detection", 1) is True
         assert SchemaRegistry.is_registered("place.classification", 1) is True
         assert SchemaRegistry.is_registered("ocr.detection", 1) is True
+        assert SchemaRegistry.is_registered("video.metadata", 1) is True
 
     def test_registered_schemas_are_correct_types(self):
         """Test that registered schemas are the correct types."""
@@ -44,6 +46,7 @@ class TestSchemaInitialization:
             == PlaceClassificationV1
         )
         assert SchemaRegistry.get_schema("ocr.detection", 1) == OCRDetectionV1
+        assert SchemaRegistry.get_schema("video.metadata", 1) == MetadataV1
 
     def test_schemas_can_validate_payloads(self):
         """Test that registered schemas can validate payloads."""

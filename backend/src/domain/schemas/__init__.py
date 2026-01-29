@@ -1,6 +1,7 @@
 """Artifact payload schema models for validation."""
 
 from src.domain.schemas.face_detection_v1 import FaceDetectionV1
+from src.domain.schemas.metadata_v1 import MetadataV1
 from src.domain.schemas.object_detection_v1 import ObjectDetectionV1
 from src.domain.schemas.ocr_detection_v1 import OCRDetectionV1
 from src.domain.schemas.ocr_text_v1 import OcrTextV1
@@ -16,4 +17,5 @@ __all__ = [
     "OcrTextV1",
     "PlaceClassificationV1",
     "SceneV1",
+    "MetadataV1",
 ]
