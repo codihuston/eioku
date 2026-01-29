@@ -137,3 +137,4 @@ volumes:
   postgres_data:
   valkey_data:
   ml_models:
+  backend_models:
