@@ -21,6 +21,7 @@ TASK_REGISTRY: dict[str, LanguageMode] = {
     "object_detection": LanguageMode.NONE,
     "place_detection": LanguageMode.NONE,
     "scene_detection": LanguageMode.NONE,
+    "metadata_extraction": LanguageMode.NONE,
 }
 
 
