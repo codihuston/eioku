@@ -433,6 +433,170 @@ class TestSceneDetectionTransformation:
         assert envelopes[1]["span_end_ms"] == 12500
 
 
+class TestMetadataExtractionTransformation:
+    """Tests for metadata extraction artifact transformation."""
+
+    def test_valid_metadata_extraction_with_all_fields(self):
+        """Test transforming valid metadata with all fields present."""
+        ml_result = {
+            "config_hash": "config_abc123",
+            "input_hash": "input_xyz789",
+            "run_id": "run_001",
+            "producer": "pyexiftool",
+            "producer_version": "0.5.5",
+            "model_profile": "balanced",
+            "metadata": {
+                "latitude": 40.7128,
+                "longitude": -74.0060,
+                "altitude": 10.5,
+                "image_size": "1920x1080",
+                "megapixels": 2.07,
+                "rotation": 0,
+                "avg_bitrate": "5000k",
+                "duration_seconds": 120.5,
+                "frame_rate": 29.97,
+                "codec": "h264",
+                "file_size": 75000000,
+                "file_type": "video",
+                "mime_type": "video/mp4",
+                "camera_make": "Canon",
+                "camera_model": "EOS R5",
+                "create_date": "2024-01-15T10:30:00Z",
+            },
+        }
+
+        envelopes = ArtifactTransformer.transform_ml_result(
+            task_id="task_007",
+            task_type="metadata_extraction",
+            video_id="video_001",
+            ml_result=ml_result,
+        )
+
+        assert len(envelopes) == 1
+        assert envelopes[0]["artifact_type"] == "video.metadata"
+        assert envelopes[0]["producer"] == "pyexiftool"
+        assert envelopes[0]["producer_version"] == "0.5.5"
+        assert envelopes[0]["model_profile"] == "balanced"
+        assert envelopes[0]["span_start_ms"] == 0
+        assert envelopes[0]["span_end_ms"] == 120500  # 120.5 seconds * 1000
+        assert envelopes[0]["payload_json"]["latitude"] == 40.7128
+        assert envelopes[0]["payload_json"]["longitude"] == -74.0060
+        assert envelopes[0]["payload_json"]["camera_make"] == "Canon"
+
+    def test_metadata_extraction_with_partial_fields(self):
+        """Test metadata extraction with only some fields present."""
+        ml_result = {
+            "config_hash": "config_abc123",
+            "input_hash": "input_xyz789",
+            "run_id": "run_001",
+            "producer": "pyexiftool",
+            "producer_version": "0.5.5",
+            "model_profile": "balanced",
+            "metadata": {
+                "duration_seconds": 60.0,
+                "file_size": 50000000,
+                "mime_type": "video/mp4",
+            },
+        }
+
+        envelopes = ArtifactTransformer.transform_ml_result(
+            task_id="task_007",
+            task_type="metadata_extraction",
+            video_id="video_001",
+            ml_result=ml_result,
+        )
+
+        assert len(envelopes) == 1
+        assert envelopes[0]["artifact_type"] == "video.metadata"
+        assert envelopes[0]["span_start_ms"] == 0
+        assert envelopes[0]["span_end_ms"] == 60000  # 60 seconds * 1000
+        assert envelopes[0]["payload_json"]["duration_seconds"] == 60.0
+        assert envelopes[0]["payload_json"]["file_size"] == 50000000
+        # Missing fields should be None
+        assert envelopes[0]["payload_json"]["latitude"] is None
+        assert envelopes[0]["payload_json"]["camera_make"] is None
+
+    def test_metadata_extraction_without_duration(self):
+        """Test metadata extraction when duration is missing."""
+        ml_result = {
+            "config_hash": "config_abc123",
+            "input_hash": "input_xyz789",
+            "run_id": "run_001",
+            "producer": "pyexiftool",
+            "producer_version": "0.5.5",
+            "model_profile": "balanced",
+            "metadata": {
+                "file_size": 50000000,
+                "mime_type": "video/mp4",
+            },
+        }
+
+        envelopes = ArtifactTransformer.transform_ml_result(
+            task_id="task_007",
+            task_type="metadata_extraction",
+            video_id="video_001",
+            ml_result=ml_result,
+        )
+
+        assert len(envelopes) == 1
+        # When duration is missing, span_end_ms should be 0
+        assert envelopes[0]["span_start_ms"] == 0
+        assert envelopes[0]["span_end_ms"] == 0
+
+    def test_metadata_extraction_with_gps_coordinates(self):
+        """Test metadata extraction with GPS coordinates."""
+        ml_result = {
+            "config_hash": "config_abc123",
+            "input_hash": "input_xyz789",
+            "run_id": "run_001",
+            "producer": "pyexiftool",
+            "producer_version": "0.5.5",
+            "model_profile": "balanced",
+            "metadata": {
+                "latitude": 51.5074,
+                "longitude": -0.1278,
+                "altitude": 5.0,
+                "duration_seconds": 90.0,
+            },
+        }
+
+        envelopes = ArtifactTransformer.transform_ml_result(
+            task_id="task_007",
+            task_type="metadata_extraction",
+            video_id="video_001",
+            ml_result=ml_result,
+        )
+
+        assert len(envelopes) == 1
+        payload = envelopes[0]["payload_json"]
+        assert payload["latitude"] == 51.5074
+        assert payload["longitude"] == -0.1278
+        assert payload["altitude"] == 5.0
+
+    def test_metadata_extraction_invalid_schema(self):
+        """Test that invalid metadata data raises ValidationError."""
+        ml_result = {
+            "config_hash": "config_abc123",
+            "input_hash": "input_xyz789",
+            "run_id": "run_001",
+            "producer": "pyexiftool",
+            "producer_version": "0.5.5",
+            "model_profile": "balanced",
+            "metadata": {
+                "megapixels": -1.0,  # Invalid: negative megapixels
+                "duration_seconds": 60.0,
+            },
+        }
+
+        with pytest.raises(ValueError, match="Invalid artifact payload"):
+            ArtifactTransformer.transform_ml_result(
+                task_id="task_007",
+                task_type="metadata_extraction",
+                video_id="video_001",
+                ml_result=ml_result,
+            )
+
+
 class TestUnknownTaskType:
     """Tests for error handling with unknown task types."""
 

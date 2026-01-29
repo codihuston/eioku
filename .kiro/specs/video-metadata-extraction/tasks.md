@@ -56,7 +56,7 @@ This implementation plan breaks down the video metadata extraction feature into 
   - **Property 1: Metadata Task Creation on Discovery**
   - **Validates: Requirements 4.1, 4.2, 4.4**
 
-- [~] 6. Create ArtifactTransformer mapping for metadata_extraction
+- [x] 6. Create ArtifactTransformer mapping for metadata_extraction
   - Add metadata_extraction to ARTIFACT_SCHEMA_MAP
   - Map to "video.metadata" artifact type
   - Set producer="pyexiftool", model_profile="balanced"
