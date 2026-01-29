@@ -41,6 +41,22 @@ export default function VideoPlayer({ videoId, apiUrl = 'http://localhost:8080',
       });
   }, [videoId, apiUrl]);
 
+  useEffect(() => {
+    // Push a new history state when entering the video player
+    window.history.pushState({ videoPlayer: true }, '');
+
+    const handlePopState = (event: PopStateEvent) => {
+      // Only handle if this is our video player state
+      if (event.state?.videoPlayer) {
+        return;
+      }
+      onBack();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [onBack]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: '#000' }}>
       {/* Header */}
