@@ -11,6 +11,13 @@ interface Artifact {
   };
 }
 
+interface RunInfo {
+  run_id: string;
+  created_at: string;
+  artifact_count: number;
+  model_profile: string | null;
+}
+
 interface Props {
   videoId: string;
   videoRef?: RefObject<HTMLVideoElement>;
@@ -19,11 +26,34 @@ interface Props {
 
 export default function ObjectDetectionViewer({ videoId, videoRef, apiUrl = 'http://localhost:8080' }: Props) {
   const [objects, setObjects] = useState<Artifact[]>([]);
+  const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [filterValue, setFilterValue] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=object.detection`)
+    // Fetch available runs
+    fetch(`${apiUrl}/api/v1/videos/${videoId}/runs?artifact_type=object.detection`)
+      .then(res => res.json())
+      .then(data => {
+        setRuns(data.runs || []);
+      })
+      .catch(err => {
+        console.error('Failed to fetch runs:', err);
+      });
+
+    let selectionParam = '';
+    const selectionModes = ['all', 'latest'];
+    if (selectionModes.includes(filterValue)) {
+      if (filterValue !== 'all') {
+        selectionParam = `&selection=${filterValue}`;
+      }
+    } else {
+      // It's a run_id
+      selectionParam = `&run_id=${filterValue}`;
+    }
+
+    fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=object.detection${selectionParam}`)
       .then(res => res.json())
       .then(data => {
         setObjects(data as Artifact[]);
@@ -33,7 +63,7 @@ export default function ObjectDetectionViewer({ videoId, videoRef, apiUrl = 'htt
         setError(err.message);
         setLoading(false);
       });
-  }, [videoId, apiUrl]);
+  }, [videoId, apiUrl, filterValue]);
 
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
@@ -46,6 +76,13 @@ export default function ObjectDetectionViewer({ videoId, videoRef, apiUrl = 'htt
       return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatRunDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString(undefined, {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
   };
 
   const jumpToTime = (ms: number) => {
@@ -77,10 +114,36 @@ export default function ObjectDetectionViewer({ videoId, videoRef, apiUrl = 'htt
 
   return (
     <div style={{ padding: '20px' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <p style={{ color: '#999', margin: '0 0 10px 0' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <p style={{ color: '#999', margin: '0' }}>
           Total detections: {objects.length}
         </p>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#999', fontSize: '14px' }}>Run:</label>
+          <select
+            value={filterValue}
+            onChange={(e) => setFilterValue(e.target.value)}
+            style={{
+              padding: '6px 10px',
+              backgroundColor: '#2a2a2a',
+              color: '#fff',
+              border: '1px solid #444',
+              borderRadius: '4px',
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">All runs</option>
+            <option value="latest">Latest only</option>
+            {runs.length > 0 && <option disabled>--- Runs ---</option>}
+            {runs.map(run => (
+              <option key={run.run_id} value={run.run_id}>
+                Run: {formatRunDate(run.created_at)}{run.model_profile ? ` - ${run.model_profile}` : ''} ({run.artifact_count} detections)
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {Object.entries(groupedByLabel).map(([label, items]) => (

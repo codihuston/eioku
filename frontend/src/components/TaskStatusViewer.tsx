@@ -20,25 +20,30 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchTasks = async () => {
+    try {
+      setIsRefreshing(true);
+      const response = await fetch(`${apiUrl}/api/v1/videos/${videoId}/tasks`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch tasks');
+      }
+      const data = await response.json();
+      setTasks(data);
+      setLoading(false);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      setLoading(false);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      try {
-        const response = await fetch(`${apiUrl}/api/v1/videos/${videoId}/tasks`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch tasks');
-        }
-        const data = await response.json();
-        setTasks(data);
-        setLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        setLoading(false);
-      }
-    };
-
     fetchTasks();
-    const interval = setInterval(fetchTasks, 5000); // Refresh every 5 seconds
+    const interval = setInterval(fetchTasks, 10000); // Refresh every 10 seconds
 
     return () => clearInterval(interval);
   }, [videoId, apiUrl]);
@@ -73,6 +78,36 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
     }
   };
 
+  const formatTime = (isoString: string | undefined) => {
+    if (!isoString) return null;
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const calculateDuration = (startTime: string | undefined, endTime: string | undefined) => {
+    if (!startTime || !endTime) return null;
+    const start = new Date(startTime).getTime();
+    const end = new Date(endTime).getTime();
+    const seconds = Math.floor((end - start) / 1000);
+    
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  };
+
+  const calculateQueueTime = (createdTime: string, startTime: string | undefined) => {
+    if (!startTime) return null;
+    const created = new Date(createdTime).getTime();
+    const started = new Date(startTime).getTime();
+    const seconds = Math.floor((started - created) / 1000);
+    
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}m ${remainingSeconds}s`;
+  };
+
   const taskTypeLabels: Record<string, string> = {
     object_detection: 'Objects',
     face_detection: 'Faces',
@@ -98,34 +133,71 @@ export default function TaskStatusViewer({ videoId, apiUrl = 'http://localhost:8
 
   return (
     <div style={{ padding: '10px' }}>
-      <div style={{ fontSize: '12px', color: '#999', marginBottom: '8px' }}>
-        Tasks: {completedCount}/{tasks.length} completed
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <button
+          onClick={fetchTasks}
+          disabled={isRefreshing}
+          style={{
+            padding: '4px 8px',
+            fontSize: '12px',
+            backgroundColor: '#2a2a2a',
+            color: '#fff',
+            border: '1px solid #444',
+            borderRadius: '3px',
+            cursor: isRefreshing ? 'not-allowed' : 'pointer',
+            opacity: isRefreshing ? 0.6 : 1,
+            transition: 'opacity 0.2s',
+          }}
+          title="Refresh task status"
+        >
+          {isRefreshing ? '⟳ Refreshing...' : '⟳ Refresh'}
+        </button>
+        <div style={{ fontSize: '12px', color: '#999' }}>
+          Tasks: {completedCount}/{tasks.length} completed
+        </div>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-        {tasks.map(task => (
-          <div
-            key={task.task_id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              backgroundColor: '#2a2a2a',
-              borderRadius: '3px',
-              border: `1px solid ${getStatusColor(task.status)}`,
-              fontSize: '11px',
-            }}
-            title={`${taskTypeLabels[task.task_type as keyof typeof taskTypeLabels] || task.task_type}: ${task.status}${task.language ? ` (${task.language})` : ''}`}
-          >
-            <span style={{ color: getStatusColor(task.status), fontWeight: 'bold' }}>
-              {getStatusIcon(task.status)}
-            </span>
-            <span style={{ color: '#fff' }}>
-              {taskTypeLabels[task.task_type as keyof typeof taskTypeLabels] || task.task_type}
-              {task.language && <span style={{ color: '#999', marginLeft: '4px' }}>({task.language})</span>}
-            </span>
-          </div>
-        ))}
+        {tasks.map(task => {
+          const queueTime = calculateQueueTime(task.created_at, task.started_at);
+          const duration = calculateDuration(task.started_at, task.completed_at);
+          const startTimeStr = formatTime(task.started_at);
+          const endTimeStr = formatTime(task.completed_at);
+          
+          const tooltipLines = [
+            `${taskTypeLabels[task.task_type as keyof typeof taskTypeLabels] || task.task_type}: ${task.status}${task.language ? ` (${task.language})` : ''}`,
+            `Queued: ${formatTime(task.created_at)}`,
+            ...(startTimeStr ? [`Started: ${startTimeStr}`] : []),
+            ...(endTimeStr ? [`Ended: ${endTimeStr}`] : []),
+            ...(queueTime ? [`Queue time: ${queueTime}`] : []),
+            ...(duration ? [`Duration: ${duration}`] : []),
+          ];
+          
+          return (
+            <div
+              key={task.task_id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 8px',
+                backgroundColor: '#2a2a2a',
+                borderRadius: '3px',
+                border: `1px solid ${getStatusColor(task.status)}`,
+                fontSize: '11px',
+              }}
+              title={tooltipLines.join('\n')}
+            >
+              <span style={{ color: getStatusColor(task.status), fontWeight: 'bold' }}>
+                {getStatusIcon(task.status)}
+              </span>
+              <span style={{ color: '#fff' }}>
+                {taskTypeLabels[task.task_type as keyof typeof taskTypeLabels] || task.task_type}
+                {task.language && <span style={{ color: '#999', marginLeft: '4px' }}>({task.language})</span>}
+              </span>
+              {duration && <span style={{ color: '#999', marginLeft: '4px', fontSize: '10px' }}>({duration})</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

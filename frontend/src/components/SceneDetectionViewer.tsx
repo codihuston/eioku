@@ -13,6 +13,13 @@ interface Scene {
   duration_ms: number;
 }
 
+interface RunInfo {
+  run_id: string;
+  created_at: string;
+  artifact_count: number;
+  model_profile: string | null;
+}
+
 interface Props {
   videoId: string;
   videoRef?: React.RefObject<HTMLVideoElement>;
@@ -21,13 +28,36 @@ interface Props {
 
 export default function SceneDetectionViewer({ videoId, videoRef, apiUrl = 'http://localhost:8080' }: Props) {
   const [scenes, setScenes] = useState<Scene[]>([]);
+  const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [filterValue, setFilterValue] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentSceneIndex, setCurrentSceneIndex] = useState(0);
 
   // Fetch scenes for the video
   useEffect(() => {
-    fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=scene`)
+    // Fetch available runs
+    fetch(`${apiUrl}/api/v1/videos/${videoId}/runs?artifact_type=scene`)
+      .then(res => res.json())
+      .then(data => {
+        setRuns(data.runs || []);
+      })
+      .catch(err => {
+        console.error('Failed to fetch runs:', err);
+      });
+
+    let selectionParam = '';
+    const selectionModes = ['all', 'latest'];
+    if (selectionModes.includes(filterValue)) {
+      if (filterValue !== 'all') {
+        selectionParam = `&selection=${filterValue}`;
+      }
+    } else {
+      // It's a run_id
+      selectionParam = `&run_id=${filterValue}`;
+    }
+
+    fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=scene${selectionParam}`)
       .then(res => res.json())
       .then(data => {
         // Extract scene data from artifacts
@@ -44,7 +74,7 @@ export default function SceneDetectionViewer({ videoId, videoRef, apiUrl = 'http
         setError(err.message);
         setLoading(false);
       });
-  }, [videoId, apiUrl]);
+  }, [videoId, apiUrl, filterValue]);
 
   // Update current scene index when video time changes
   useEffect(() => {
@@ -87,6 +117,13 @@ export default function SceneDetectionViewer({ videoId, videoRef, apiUrl = 'http
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const formatRunDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString(undefined, {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  };
+
   if (loading) {
     return <div style={{ padding: '20px', fontSize: '14px', color: '#999' }}>Loading scenes...</div>;
   }
@@ -101,6 +138,36 @@ export default function SceneDetectionViewer({ videoId, videoRef, apiUrl = 'http
 
   return (
     <div style={{ padding: '20px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <p style={{ color: '#999', margin: '0' }}>
+          Total scenes: {scenes.length}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ color: '#999', fontSize: '14px' }}>Run:</label>
+          <select
+            value={filterValue}
+            onChange={(e) => setFilterValue(e.target.value)}
+            style={{
+              padding: '6px 10px',
+              backgroundColor: '#2a2a2a',
+              color: '#fff',
+              border: '1px solid #444',
+              borderRadius: '4px',
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="all">All runs</option>
+            <option value="latest">Latest only</option>
+            {runs.length > 0 && <option disabled>--- Runs ---</option>}
+            {runs.map(run => (
+              <option key={run.run_id} value={run.run_id}>
+                Run: {formatRunDate(run.created_at)}{run.model_profile ? ` - ${run.model_profile}` : ''} ({run.artifact_count} scenes)
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div style={{
         maxHeight: '600px',
         overflowY: 'auto',
