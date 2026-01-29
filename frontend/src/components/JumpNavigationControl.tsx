@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 interface Artifact {
   artifact_id: string;
@@ -24,6 +24,7 @@ export default function JumpNavigationControl({ videoId, videoRef, apiUrl = 'htt
   const [artifactTypes, setArtifactTypes] = useState<string[]>([]);
   const [selectedType, setSelectedType] = useState<string>('');
   const [options, setOptions] = useState<ArtifactOption[]>([]);
+  const [allArtifacts, setAllArtifacts] = useState<Artifact[]>([]);
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [confidenceThreshold, setConfidenceThreshold] = useState(0);
   const [jumpTime, setJumpTime] = useState('');
@@ -52,6 +53,58 @@ export default function JumpNavigationControl({ videoId, videoRef, apiUrl = 'htt
     fetchArtifactTypes();
   }, [videoId, apiUrl]);
 
+  // Define calculateOptions with useCallback to memoize it
+  const calculateOptions = useCallback((artifacts: Artifact[], threshold: number) => {
+    // Aggregate options based on artifact type
+    const optionMap = new Map<string, ArtifactOption>();
+
+    artifacts.forEach((artifact: Artifact) => {
+      const payload = artifact.payload;
+      const confidence = payload.confidence as number;
+
+      // Skip artifacts below confidence threshold
+      if (threshold > 0 && confidence !== undefined && confidence < threshold) {
+        return;
+      }
+
+      let key = '';
+      let label = '';
+
+      if (selectedType === 'object.detection') {
+        key = `obj_${payload.label}`;
+        label = payload.label as string;
+      } else if (selectedType === 'face.detection') {
+        key = `face_${payload.cluster_id || 'unknown'}`;
+        label = payload.cluster_id ? `Face Cluster ${(payload.cluster_id as string).slice(0, 8)}` : 'Unknown Face';
+      } else if (selectedType === 'place.classification') {
+        key = `place_${payload.label}`;
+        label = payload.label as string;
+      } else if (selectedType === 'transcript.segment') {
+        key = 'transcript';
+        label = 'Transcript';
+      } else if (selectedType === 'ocr.text') {
+        key = 'ocr';
+        label = 'OCR Text';
+      } else if (selectedType === 'scene') {
+        key = `scene_${payload.scene_index}`;
+        label = `Scene ${payload.scene_index}`;
+      }
+
+      if (key) {
+        const existing = optionMap.get(key) || {
+          type: selectedType,
+          label,
+          confidence: confidence,
+          count: 0,
+        };
+        existing.count += 1;
+        optionMap.set(key, existing);
+      }
+    });
+
+    setOptions(Array.from(optionMap.values()).sort((a, b) => b.count - a.count));
+  }, [selectedType]);
+
   // Fetch options for selected artifact type
   useEffect(() => {
     if (!selectedType) return;
@@ -60,48 +113,10 @@ export default function JumpNavigationControl({ videoId, videoRef, apiUrl = 'htt
       try {
         const response = await fetch(`${apiUrl}/api/v1/videos/${videoId}/artifacts?type=${selectedType}`);
         const artifacts: Artifact[] = await response.json();
+        setAllArtifacts(artifacts);
 
-        // Aggregate options based on artifact type
-        const optionMap = new Map<string, ArtifactOption>();
-
-        artifacts.forEach((artifact: Artifact) => {
-          const payload = artifact.payload;
-          let key = '';
-          let label = '';
-
-          if (selectedType === 'object.detection') {
-            key = `obj_${payload.label}`;
-            label = payload.label as string;
-          } else if (selectedType === 'face.detection') {
-            key = `face_${payload.cluster_id || 'unknown'}`;
-            label = payload.cluster_id ? `Face Cluster ${(payload.cluster_id as string).slice(0, 8)}` : 'Unknown Face';
-          } else if (selectedType === 'place.classification') {
-            key = `place_${payload.label}`;
-            label = payload.label as string;
-          } else if (selectedType === 'transcript.segment') {
-            key = 'transcript';
-            label = 'Transcript';
-          } else if (selectedType === 'ocr.text') {
-            key = 'ocr';
-            label = 'OCR Text';
-          } else if (selectedType === 'scene') {
-            key = `scene_${payload.scene_index}`;
-            label = `Scene ${payload.scene_index}`;
-          }
-
-          if (key) {
-            const existing = optionMap.get(key) || {
-              type: selectedType,
-              label,
-              confidence: payload.confidence as number,
-              count: 0,
-            };
-            existing.count += 1;
-            optionMap.set(key, existing);
-          }
-        });
-
-        setOptions(Array.from(optionMap.values()).sort((a, b) => b.count - a.count));
+        // Calculate options with current confidence threshold
+        calculateOptions(artifacts, confidenceThreshold);
         setSelectedOptions(new Set());
       } catch (err) {
         console.error('Failed to fetch options:', err);
@@ -109,7 +124,14 @@ export default function JumpNavigationControl({ videoId, videoRef, apiUrl = 'htt
     };
 
     fetchOptions();
-  }, [selectedType, videoId, apiUrl]);
+  }, [selectedType, videoId, apiUrl, confidenceThreshold, calculateOptions]);
+
+  // Recalculate options when confidence threshold changes
+  useEffect(() => {
+    if (allArtifacts.length > 0) {
+      calculateOptions(allArtifacts, confidenceThreshold);
+    }
+  }, [confidenceThreshold, allArtifacts, calculateOptions]);
 
   const toggleOption = (option: ArtifactOption) => {
     const key = `${option.label}`;

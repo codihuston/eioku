@@ -1,0 +1,12 @@
+# syntax=docker/dockerfile:1.4
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package.json and package-lock.json to install dependencies
+# These will be overwritten by the volume mount from the host, but we need them for npm install
+# The host's node_modules will then persist
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
