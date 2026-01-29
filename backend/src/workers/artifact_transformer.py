@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from ..domain.schemas import (
     FaceDetectionV1,
+    MetadataV1,
     ObjectDetectionV1,
     OCRDetectionV1,
     PlaceClassificationV1,
@@ -52,6 +53,11 @@ ARTIFACT_SCHEMA_MAP = {
         "artifact_type": "scene.detection",
         "schema": SceneV1,
         "result_key": "scenes",
+    },
+    "metadata_extraction": {
+        "artifact_type": "video.metadata",
+        "schema": MetadataV1,
+        "result_key": "metadata",
     },
 }
 
@@ -107,6 +113,11 @@ class ArtifactTransformer:
 
         # Extract items from result
         items = ml_result.get(result_key, [])
+
+        # Special handling for metadata_extraction: wrap single dict as list
+        if task_type == "metadata_extraction" and isinstance(items, dict):
+            items = [items]
+
         if not isinstance(items, list):
             raise ValueError(
                 f"Expected {result_key} to be a list in ML result for task {task_id}"
@@ -244,6 +255,14 @@ class ArtifactTransformer:
         elif artifact_type == "scene.detection":
             # Scene detection: use start_ms and end_ms directly
             return item.start_ms, item.end_ms
+
+        elif artifact_type == "video.metadata":
+            # Metadata: spans entire video (0 to duration)
+            # Duration is in seconds, convert to milliseconds
+            duration_ms = (
+                int(item.duration_seconds * 1000) if item.duration_seconds else 0
+            )
+            return 0, duration_ms
 
         else:
             raise ValueError(f"Unknown artifact type: {artifact_type}")
