@@ -79,4 +79,3 @@ test-videos/
 *.pb
 *.tflite
 backend/models/
-backend/categories_places365.txt

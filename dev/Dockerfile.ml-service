@@ -27,6 +27,9 @@ RUN poetry lock --no-update
 # Install dependencies with poetry
 RUN poetry install --no-root
 
+# Copy labels file
+COPY ml-service/categories_places365.txt ./
+
 # Copy application code
 COPY ml-service/src ./src
 

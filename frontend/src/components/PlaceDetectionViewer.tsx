@@ -5,12 +5,10 @@ interface Artifact {
   span_start_ms: number;
   span_end_ms: number;
   payload: {
-    places?: Array<{
-      name: string;
+    predictions?: Array<{
+      label: string;
       confidence: number;
     }>;
-    top_place?: string;
-    confidence?: number;
   };
 }
 
@@ -170,19 +168,19 @@ export default function PlaceDetectionViewer({ videoId, videoRef, apiUrl = 'http
               {formatTime(item.span_start_ms)}
             </div>
             <div style={{ fontSize: '14px', color: '#fff', marginBottom: '8px', fontWeight: '600' }}>
-              {item.payload.top_place || 'Unknown'}
+              {item.payload.predictions?.[0]?.label || 'Unknown'}
             </div>
-            {item.payload.confidence && (
+            {item.payload.predictions?.[0]?.confidence && (
               <div style={{ fontSize: '12px', color: '#999', marginBottom: '8px' }}>
-                Confidence: {(item.payload.confidence * 100).toFixed(1)}%
+                Confidence: {(item.payload.predictions[0].confidence * 100).toFixed(1)}%
               </div>
             )}
-            {item.payload.places && item.payload.places.length > 0 && (
+            {item.payload.predictions && item.payload.predictions.length > 0 && (
               <div style={{ fontSize: '11px', color: '#666' }}>
                 <div style={{ marginBottom: '4px', color: '#999' }}>Top matches:</div>
-                {item.payload.places.slice(0, 3).map((place, idx) => (
+                {item.payload.predictions.slice(1, 3).map((prediction, idx) => (
                   <div key={idx} style={{ marginLeft: '8px', marginBottom: '2px' }}>
-                    • {place.name}: {(place.confidence * 100).toFixed(1)}%
+                    • {prediction.label}: {(prediction.confidence * 100).toFixed(1)}%
                   </div>
                 ))}
               </div>
@@ -193,3 +191,4 @@ export default function PlaceDetectionViewer({ videoId, videoRef, apiUrl = 'http
     </div>
   );
 }
+
