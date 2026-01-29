@@ -29,7 +29,7 @@ This implementation plan breaks down the video metadata extraction feature into 
   - Populate from EXIF create_date (preferred), file system mtime (fallback), or discovery timestamp
   - _Requirements: Future "next video" navigation feature_
 
-- [ ] 3. Implement MetadataExtractor in ML service
+- [x] 3. Implement MetadataExtractor in ML service
   - Create MetadataExtractor class using pyexiftool
   - Extract Composite fields with QuickTime fallbacks
   - Omit null values from output

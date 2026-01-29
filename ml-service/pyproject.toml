@@ -34,6 +34,8 @@ redis = "^5.0.0"
 # System monitoring
 psutil = "^5.9.0"
 nvidia-ml-py = "^12.535.108"
+# Metadata extraction
+pyexiftool = "^0.5.5"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.6"

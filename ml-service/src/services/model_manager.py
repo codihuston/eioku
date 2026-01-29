@@ -833,3 +833,34 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Scene detection failed: {e}", exc_info=True)
             raise
+
+    async def extract_metadata(self, video_path: str, config: dict) -> dict:
+        """Extract metadata from video file using pyexiftool.
+
+        Args:
+            video_path: Path to video file
+            config: Configuration dict (currently unused, for future extensibility)
+
+        Returns:
+            Dictionary with metadata fields
+        """
+        try:
+            from .metadata_extractor import MetadataExtractor
+
+            logger.info(f"Metadata extraction: {video_path}")
+
+            # Initialize extractor
+            extractor = MetadataExtractor()
+
+            # Extract metadata
+            metadata = extractor.extract(video_path)
+
+            logger.info(f"✅ Metadata extraction complete: {len(metadata)} fields")
+
+            # Return metadata wrapped in expected format
+            # Task handler will extract producer/version info separately
+            return {"metadata": metadata}
+
+        except Exception as e:
+            logger.error(f"Metadata extraction failed: {e}", exc_info=True)
+            raise

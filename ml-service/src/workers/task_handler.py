@@ -96,6 +96,7 @@ async def process_ml_task(
             "ocr": "ocr",
             "place_detection": "places",
             "scene_detection": "scenes",
+            "metadata_extraction": "metadata",
         }
         endpoint = task_to_endpoint.get(task_type)
         if not endpoint:
@@ -116,6 +117,8 @@ async def process_ml_task(
             result = await model_manager.classify_places(video_path, config or {})
         elif task_type == "scene_detection":
             result = await model_manager.detect_scenes(video_path, config or {})
+        elif task_type == "metadata_extraction":
+            result = await model_manager.extract_metadata(video_path, config or {})
         else:
             raise ValueError(f"Unknown task type: {task_type}")
 
@@ -145,6 +148,12 @@ async def process_ml_task(
         producer_version = result_dict.get("producer_version", "1.0.0")
         model_profile = result_dict.get("model_profile", "balanced")
 
+        # Set producer info for metadata_extraction
+        if task_type == "metadata_extraction":
+            producer = "pyexiftool"
+            producer_version = "0.5.5"
+            model_profile = "balanced"
+
         # Map task types to artifact types
         task_to_artifact_type = {
             "object_detection": "object.detection",
@@ -153,6 +162,7 @@ async def process_ml_task(
             "ocr": "ocr.text",
             "place_detection": "place.classification",
             "scene_detection": "scene",
+            "metadata_extraction": "video.metadata",
         }
 
         artifact_type = task_to_artifact_type.get(task_type)
@@ -167,6 +177,7 @@ async def process_ml_task(
             "ocr": "detections",
             "place_detection": "classifications",
             "scene_detection": "scenes",
+            "metadata_extraction": "metadata",
         }
 
         result_key = task_to_result_key.get(task_type)
@@ -174,16 +185,31 @@ async def process_ml_task(
             raise ValueError(f"Unknown task type: {task_type}")
 
         # Extract detections/segments from response
-        detections = result_dict.get(result_key, [])
-        if not detections:
-            logger.warning(
-                f"⚠️  No detections found in inference results for task {task_id}"
-            )
+        # For metadata_extraction, the result is a single object, not a list
+        if task_type == "metadata_extraction":
+            metadata = result_dict.get(result_key, {})
+            if not metadata:
+                logger.warning(
+                    f"⚠️  No metadata found in inference results for task {task_id}"
+                )
+                detections = []
+            else:
+                logger.info(
+                    f"🔄 Processing metadata into ArtifactEnvelope for task {task_id}"
+                )
+                # Wrap metadata as a single detection for uniform processing
+                detections = [metadata]
         else:
-            logger.info(
-                f"🔄 Processing {len(detections)} detections into ArtifactEnvelopes "
-                f"for task {task_id}"
-            )
+            detections = result_dict.get(result_key, [])
+            if not detections:
+                logger.warning(
+                    f"⚠️  No detections found in inference results for task {task_id}"
+                )
+            else:
+                logger.info(
+                    f"🔄 Processing {len(detections)} detections into ArtifactEnvelopes "
+                    f"for task {task_id}"
+                )
 
             # Transform each detection to an ArtifactEnvelope
             for idx, detection in enumerate(detections):
@@ -192,12 +218,18 @@ async def process_ml_task(
                     artifact_id = f"{video_id}_{task_type}_{run_id}_{idx}"
 
                     # Extract time span (in milliseconds)
+                    # For metadata_extraction, span covers entire video (0 to duration)
+                    if task_type == "metadata_extraction":
+                        # Get video duration from metadata if available
+                        duration_seconds = detection.get("duration_seconds", 0)
+                        span_start_ms = 0
+                        span_end_ms = int(duration_seconds * 1000) if duration_seconds else 0
                     # Some detections have explicit start_ms/end_ms
                     # (transcription, scenes)
-                    # Others have timestamp_ms (point-in-time detections)
-                    if "start_ms" in detection and "end_ms" in detection:
+                    elif "start_ms" in detection and "end_ms" in detection:
                         span_start_ms = int(detection.get("start_ms", 0))
                         span_end_ms = int(detection.get("end_ms", 0))
+                    # Others have timestamp_ms (point-in-time detections)
                     elif "timestamp_ms" in detection:
                         # For point-in-time detections, use timestamp as
                         # both start and end
