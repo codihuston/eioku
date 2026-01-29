@@ -25,6 +25,7 @@ ACTIVE_TASK_TYPES = [
     "ocr",
     "place_detection",
     "scene_detection",
+    "metadata_extraction",
 ]
 
 
@@ -425,6 +426,7 @@ class VideoDiscoveryService:
                 "threshold": 0.7,
                 "min_scene_length": 0.6,
             },
+            "metadata_extraction": {},
         }
 
         # Get default config for task type
