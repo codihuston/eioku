@@ -340,3 +340,204 @@ class TestProjectionSyncService:
         # Verify SQL was executed twice (metadata + FTS5)
         # Commit happens in batch_create, not here
         assert self.mock_session.execute.call_count == 2
+
+    def test_sync_video_metadata_with_gps_postgresql(self):
+        """Test syncing video.metadata artifact with GPS to PostgreSQL."""
+        # Create metadata artifact with GPS coordinates
+        metadata_artifact = ArtifactEnvelope(
+            artifact_id="metadata_001",
+            asset_id="video_123",
+            artifact_type="video.metadata",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=120000,
+            payload_json=(
+                '{"latitude": 40.7128, "longitude": -74.0060, "altitude": 10.5, '
+                '"duration_seconds": 120.0, "file_size": 75000000, '
+                '"mime_type": "video/mp4", "camera_make": "Canon", '
+                '"camera_model": "EOS R5"}'
+            ),
+            producer="pyexiftool",
+            producer_version="0.5.5",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_123",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock PostgreSQL dialect
+        self.mock_bind.dialect.name = "postgresql"
+
+        # Sync artifact
+        self.service.sync_artifact(metadata_artifact)
+
+        # Verify SQL was executed
+        assert self.mock_session.execute.called
+
+        # Verify the SQL contains the expected GPS data
+        call_args = self.mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["artifact_id"] == "metadata_001"
+        assert params["asset_id"] == "video_123"
+        assert params["latitude"] == 40.7128
+        assert params["longitude"] == -74.0060
+        assert params["altitude"] == 10.5
+
+    def test_sync_video_metadata_with_gps_sqlite(self):
+        """Test syncing video.metadata artifact with GPS to SQLite."""
+        # Create metadata artifact with GPS coordinates
+        metadata_artifact = ArtifactEnvelope(
+            artifact_id="metadata_002",
+            asset_id="video_456",
+            artifact_type="video.metadata",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=90000,
+            payload_json=(
+                '{"latitude": 51.5074, "longitude": -0.1278, "altitude": 5.0, '
+                '"duration_seconds": 90.0, "file_size": 50000000}'
+            ),
+            producer="pyexiftool",
+            producer_version="0.5.5",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_456",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock SQLite dialect
+        self.mock_bind.dialect.name = "sqlite"
+
+        # Sync artifact
+        self.service.sync_artifact(metadata_artifact)
+
+        # Verify SQL was executed
+        assert self.mock_session.execute.called
+
+        # Verify the SQL contains the expected GPS data
+        call_args = self.mock_session.execute.call_args
+        params = call_args[0][1]
+        assert params["latitude"] == 51.5074
+        assert params["longitude"] == -0.1278
+        assert params["altitude"] == 5.0
+
+    def test_sync_video_metadata_without_gps(self):
+        """Test syncing video.metadata artifact without GPS coordinates."""
+        # Create metadata artifact without GPS
+        metadata_artifact = ArtifactEnvelope(
+            artifact_id="metadata_003",
+            asset_id="video_789",
+            artifact_type="video.metadata",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=60000,
+            payload_json=(
+                '{"duration_seconds": 60.0, "file_size": 40000000, '
+                '"mime_type": "video/mp4"}'
+            ),
+            producer="pyexiftool",
+            producer_version="0.5.5",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_789",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock PostgreSQL dialect
+        self.mock_bind.dialect.name = "postgresql"
+
+        # Sync artifact
+        self.service.sync_artifact(metadata_artifact)
+
+        # Verify SQL was NOT executed (no GPS coordinates)
+        assert not self.mock_session.execute.called
+
+    def test_sync_video_metadata_invalid_latitude(self):
+        """Test error handling for invalid latitude."""
+        # Create metadata artifact with invalid latitude
+        metadata_artifact = ArtifactEnvelope(
+            artifact_id="metadata_004",
+            asset_id="video_999",
+            artifact_type="video.metadata",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=60000,
+            payload_json=(
+                '{"latitude": 95.0, "longitude": -74.0060, "altitude": 10.5}'
+            ),
+            producer="pyexiftool",
+            producer_version="0.5.5",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_999",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock PostgreSQL dialect
+        self.mock_bind.dialect.name = "postgresql"
+
+        # Should raise ProjectionSyncError
+        with pytest.raises(ProjectionSyncError, match="Invalid latitude"):
+            self.service.sync_artifact(metadata_artifact)
+
+    def test_sync_video_metadata_invalid_longitude(self):
+        """Test error handling for invalid longitude."""
+        # Create metadata artifact with invalid longitude
+        metadata_artifact = ArtifactEnvelope(
+            artifact_id="metadata_005",
+            asset_id="video_888",
+            artifact_type="video.metadata",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=60000,
+            payload_json=(
+                '{"latitude": 40.7128, "longitude": 200.0, "altitude": 10.5}'
+            ),
+            producer="pyexiftool",
+            producer_version="0.5.5",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_888",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock PostgreSQL dialect
+        self.mock_bind.dialect.name = "postgresql"
+
+        # Should raise ProjectionSyncError
+        with pytest.raises(ProjectionSyncError, match="Invalid longitude"):
+            self.service.sync_artifact(metadata_artifact)
+
+    def test_sync_video_metadata_partial_gps(self):
+        """Test that partial GPS coordinates (only latitude) are skipped."""
+        # Create metadata artifact with only latitude
+        metadata_artifact = ArtifactEnvelope(
+            artifact_id="metadata_006",
+            asset_id="video_777",
+            artifact_type="video.metadata",
+            schema_version=1,
+            span_start_ms=0,
+            span_end_ms=60000,
+            payload_json='{"latitude": 40.7128, "duration_seconds": 60.0}',
+            producer="pyexiftool",
+            producer_version="0.5.5",
+            model_profile="balanced",
+            config_hash="abc123",
+            input_hash="def456",
+            run_id="run_777",
+            created_at=datetime.utcnow(),
+        )
+
+        # Mock PostgreSQL dialect
+        self.mock_bind.dialect.name = "postgresql"
+
+        # Sync artifact
+        self.service.sync_artifact(metadata_artifact)
+
+        # Verify SQL was NOT executed (incomplete GPS)
+        assert not self.mock_session.execute.called

@@ -62,7 +62,7 @@ This implementation plan breaks down the video metadata extraction feature into 
   - Set producer="pyexiftool", model_profile="balanced"
   - _Requirements: 2.1, 2.4, 2.5_
 
-- [ ] 7. Implement metadata artifact persistence
+- [x] 7. Implement metadata artifact persistence
   - Create artifact envelope from extraction results
   - Set span_start_ms=0, span_end_ms=video_duration_ms
   - Persist to artifacts table with schema_version=1
@@ -72,7 +72,7 @@ This implementation plan breaks down the video metadata extraction feature into 
   - **Property 9: Metadata Artifact Persistence**
   - **Validates: Requirements 2.6**
 
-- [ ] 8. Implement GPS projection sync in ProjectionSyncService
+- [x] 8. Implement GPS projection sync in ProjectionSyncService
   - Add _sync_video_metadata method to ProjectionSyncService
   - Extract GPS coordinates from metadata artifact payload
   - Create video_locations entry if GPS exists
@@ -87,7 +87,7 @@ This implementation plan breaks down the video metadata extraction feature into 
   - **Property 5: No GPS Projection Without Coordinates**
   - **Validates: Requirements 3.4**
 
-- [ ] 9. Checkpoint - Ensure all backend tests pass
+- [x] 9. Checkpoint - Ensure all backend tests pass
   - Run all backend tests: `cd backend && poetry run pytest tests/`
   - Verify metadata extraction, artifact persistence, and projection sync
   - Ask the user if questions arise.
