@@ -40,7 +40,7 @@ This implementation plan breaks down the video metadata extraction feature into 
   - **Property 6: Metadata Extraction Handles Missing Fields**
   - **Validates: Requirements 1.4, 1.5, 6.1, 6.2**
 
-- [ ] 4. Add metadata_extraction task type to task registry
+- [x] 4. Add metadata_extraction task type to task registry
   - Define metadata_extraction in TASK_REGISTRY
   - Mark as language-agnostic (language not required)
   - Set default configuration in content_creator.json

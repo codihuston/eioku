@@ -41,6 +41,11 @@
       "count": 2,
       "priority": 2,
       "resource": "cpu"
+    },
+    "metadata_extraction": {
+      "count": 2,
+      "priority": 1,
+      "resource": "cpu"
     }
   },
   "task_settings": {
