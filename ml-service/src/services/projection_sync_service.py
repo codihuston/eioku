@@ -44,6 +44,8 @@ class ProjectionSyncService:
                 self._sync_face_clusters(artifact)
             elif artifact.artifact_type == "ocr.text":
                 self._sync_ocr_fts(artifact)
+            elif artifact.artifact_type == "video.metadata":
+                self._sync_video_metadata(artifact)
             # Add more artifact types here as they are implemented
             # elif artifact.artifact_type == "place.classification":
             #     self._sync_place_labels(artifact)
@@ -384,4 +386,137 @@ class ProjectionSyncService:
 
         logger.debug(
             f"Synced ocr.text artifact {artifact.artifact_id} to FTS projection"
+        )
+
+    def _sync_video_metadata(self, artifact: ArtifactEnvelope) -> None:
+        """
+        Synchronize video.metadata artifact to video_locations projection.
+
+        Extracts GPS coordinates from metadata payload and creates an entry
+        in the video_locations projection table for geo-spatial queries.
+        Performs reverse geocoding to populate country, state, and city fields.
+
+        Args:
+            artifact: The video.metadata artifact to synchronize
+
+        Raises:
+            ProjectionSyncError: If GPS coordinates are invalid or sync fails
+        """
+        # Parse payload to extract GPS coordinates
+        payload = json.loads(artifact.payload_json)
+        latitude = payload.get("latitude")
+        longitude = payload.get("longitude")
+        altitude = payload.get("altitude")
+
+        # Only create projection entry if GPS coordinates exist
+        if latitude is None or longitude is None:
+            logger.debug(
+                f"No GPS coordinates in metadata artifact {artifact.artifact_id}, "
+                f"skipping video_locations projection"
+            )
+            return
+
+        # Validate GPS coordinates
+        try:
+            latitude = float(latitude)
+            longitude = float(longitude)
+            altitude = float(altitude) if altitude is not None else None
+
+            # Validate latitude range: -90 to 90
+            if not (-90 <= latitude <= 90):
+                raise ValueError(
+                    f"Invalid latitude {latitude}: must be between -90 and 90"
+                )
+
+            # Validate longitude range: -180 to 180
+            if not (-180 <= longitude <= 180):
+                raise ValueError(
+                    f"Invalid longitude {longitude}: must be between -180 and 180"
+                )
+
+        except (ValueError, TypeError) as e:
+            logger.error(
+                f"Invalid GPS coordinates in metadata artifact "
+                f"{artifact.artifact_id}: {e}"
+            )
+            raise ProjectionSyncError(f"Invalid GPS coordinates: {e}") from e
+
+        # Perform reverse geocoding to get location names
+        from geopy.geocoders import Nominatim
+
+        logger.info(f"🌍 Reverse geocoding coordinates: {latitude}, {longitude}")
+        try:
+            geocoder = Nominatim(user_agent="eioku_video_metadata", timeout=10)
+            location = geocoder.reverse(f"{latitude}, {longitude}", language="en")
+            address = location.raw.get("address", {})
+
+            country = address.get("country")
+            state = address.get("state")
+            city = address.get("city") or address.get("town") or address.get("village")
+            logger.info(
+                f"✓ Geocoding result: country={country}, state={state}, city={city}"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to reverse geocode coordinates ({latitude}, {longitude}): {e}"
+            )
+            country = None
+            state = None
+            city = None
+
+        # Determine if we're using PostgreSQL or SQLite
+        bind = self.session.bind
+        is_postgresql = bind.dialect.name == "postgresql"
+
+        if is_postgresql:
+            # PostgreSQL syntax - UPSERT on video_id
+            # Each video has only one metadata set, so we overwrite on re-extraction
+            sql = text(
+                """
+                INSERT INTO video_locations
+                    (artifact_id, video_id, latitude, longitude, altitude,
+                     country, state, city)
+                VALUES (:artifact_id, :video_id, :latitude, :longitude, :altitude,
+                        :country, :state, :city)
+                ON CONFLICT (video_id) DO UPDATE
+                SET artifact_id = EXCLUDED.artifact_id,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    altitude = EXCLUDED.altitude,
+                    country = EXCLUDED.country,
+                    state = EXCLUDED.state,
+                    city = EXCLUDED.city
+                """
+            )
+        else:
+            # SQLite syntax
+            sql = text(
+                """
+                INSERT OR REPLACE INTO video_locations
+                    (artifact_id, video_id, latitude, longitude, altitude,
+                     country, state, city)
+                VALUES (:artifact_id, :video_id, :latitude, :longitude, :altitude,
+                        :country, :state, :city)
+                """
+            )
+
+        self.session.execute(
+            sql,
+            {
+                "artifact_id": artifact.artifact_id,
+                "video_id": artifact.asset_id,
+                "latitude": latitude,
+                "longitude": longitude,
+                "altitude": altitude,
+                "country": country,
+                "state": state,
+                "city": city,
+            },
+        )
+
+        logger.debug(
+            f"Synced video.metadata artifact {artifact.artifact_id} "
+            f"to video_locations projection "
+            f"(lat={latitude}, lon={longitude}, "
+            f"country={country}, state={state}, city={city})"
         )

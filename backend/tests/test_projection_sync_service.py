@@ -379,7 +379,7 @@ class TestProjectionSyncService:
         call_args = self.mock_session.execute.call_args
         params = call_args[0][1]
         assert params["artifact_id"] == "metadata_001"
-        assert params["asset_id"] == "video_123"
+        assert params["video_id"] == "video_123"
         assert params["latitude"] == 40.7128
         assert params["longitude"] == -74.0060
         assert params["altitude"] == 10.5

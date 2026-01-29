@@ -15,6 +15,9 @@ class Video(Base):
     file_size = Column(Integer)  # File size in bytes
     processed_at = Column(DateTime)
     last_modified = Column(DateTime, nullable=False)
+    file_created_at = Column(
+        DateTime, nullable=True, index=True
+    )  # From EXIF or file system
     status = Column(String, nullable=False, default="pending", index=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

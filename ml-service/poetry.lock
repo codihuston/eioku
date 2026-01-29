@@ -790,6 +790,42 @@ test-full = ["adlfs", "aiohttp (!=4.0.0a0,!=4.0.0a1)", "backports-zstd ; python_
 tqdm = ["tqdm"]
 
 [[package]]
+name = "geographiclib"
+version = "2.1"
+description = "The geodesic routines from GeographicLib"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "geographiclib-2.1-py3-none-any.whl", hash = "sha256:e2a873b9b9e7fc38721ad73d5f4e6c9ed140d428a339970f505c07056997d40b"},
+    {file = "geographiclib-2.1.tar.gz", hash = "sha256:6a6545e6262d0ed3522e13c515713718797e37ed8c672c31ad7b249f372ef108"},
+]
+
+[[package]]
+name = "geopy"
+version = "2.4.1"
+description = "Python Geocoding Toolbox"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "geopy-2.4.1-py3-none-any.whl", hash = "sha256:ae8b4bc5c1131820f4d75fce9d4aaaca0c85189b3aa5d64c3dcaf5e3b7b882a7"},
+    {file = "geopy-2.4.1.tar.gz", hash = "sha256:50283d8e7ad07d89be5cb027338c6365a32044df3ae2556ad3f52f4840b3d0d1"},
+]
+
+[package.dependencies]
+geographiclib = ">=1.52,<3"
+
+[package.extras]
+aiohttp = ["aiohttp"]
+dev = ["coverage", "flake8 (>=5.0,<5.1)", "isort (>=5.10.0,<5.11.0)", "pytest (>=3.10)", "pytest-asyncio (>=0.17)", "readme-renderer", "sphinx (<=4.3.2)", "sphinx-issues", "sphinx-rtd-theme (>=0.5.0)"]
+dev-docs = ["readme-renderer", "sphinx (<=4.3.2)", "sphinx-issues", "sphinx-rtd-theme (>=0.5.0)"]
+dev-lint = ["flake8 (>=5.0,<5.1)", "isort (>=5.10.0,<5.11.0)"]
+dev-test = ["coverage", "pytest (>=3.10)", "pytest-asyncio (>=0.17)", "sphinx (<=4.3.2)"]
+requests = ["requests (>=2.16.2)", "urllib3 (>=1.24.2)"]
+timezone = ["pytz"]
+
+[[package]]
 name = "greenlet"
 version = "3.3.1"
 description = "Lightweight in-process concurrent programming"
@@ -2525,6 +2561,23 @@ files = [
 
 [package.dependencies]
 typing-extensions = ">=4.14.1"
+
+[[package]]
+name = "pyexiftool"
+version = "0.5.6"
+description = "Python wrapper for exiftool"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "PyExifTool-0.5.6-py3-none-any.whl", hash = "sha256:ac7d7836d2bf373f20aa558528f6b2222c4c0d896ed28c951a3ff8e6cec05a87"},
+    {file = "PyExifTool-0.5.6.tar.gz", hash = "sha256:22a972c1c212d1ad5f61916fded5057333dcc48fb8e42eed12d2ff9665b367ae"},
+]
+
+[package.extras]
+docs = ["packaging", "sphinx", "sphinx-autoapi", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
+json = ["orjson", "simplejson", "ujson"]
+test = ["packaging"]
 
 [[package]]
 name = "pyjwt"
@@ -4317,4 +4370,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "43ad1d497f900b04be6d767904005313762a4a1af43073accc214423947bc003"
+content-hash = "140fbff4cdc73ea6c1de7ca84e48a10ac01df87ca083ee0e63fc91e65302ee61"

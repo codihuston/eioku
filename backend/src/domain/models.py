@@ -14,6 +14,7 @@ class Video:
         file_hash: str | None = None,
         duration: float | None = None,
         file_size: int | None = None,
+        file_created_at: datetime | None = None,
         processed_at: datetime | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -26,6 +27,7 @@ class Video:
         self.file_hash = file_hash
         self.duration = duration
         self.file_size = file_size
+        self.file_created_at = file_created_at
         self.processed_at = processed_at
         self.created_at = created_at
         self.updated_at = updated_at

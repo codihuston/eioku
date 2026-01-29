@@ -129,3 +129,17 @@ async def stream_video(
         media_type="video/mp4",
         headers={"Accept-Ranges": "bytes"},
     )
+
+
+@router.get("/{video_id}/location", response_model=dict)
+async def get_video_location(
+    video_id: str, service: VideoService = Depends(get_video_service)
+) -> dict:
+    """Get location information for a video from the video_locations projection."""
+    location = service.get_video_location(video_id)
+    if not location:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No location data available for this video",
+        )
+    return location

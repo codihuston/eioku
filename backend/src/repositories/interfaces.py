@@ -37,6 +37,11 @@ class VideoRepository(ABC):
         """Find all videos."""
         pass
 
+    @abstractmethod
+    def get_location(self, video_id: str) -> dict | None:
+        """Get location information for a video from the video_locations projection."""
+        pass
+
 
 class PathConfigRepository(ABC):
     """Abstract repository interface for PathConfig persistence."""

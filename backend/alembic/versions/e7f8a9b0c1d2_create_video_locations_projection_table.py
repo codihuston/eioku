@@ -24,22 +24,25 @@ def upgrade() -> None:
     op.create_table(
         "video_locations",
         sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("video_id", sa.String(), nullable=False),
         sa.Column("artifact_id", sa.String(), nullable=False),
-        sa.Column("asset_id", sa.String(), nullable=False),
         sa.Column("latitude", sa.Float(), nullable=False),
         sa.Column("longitude", sa.Float(), nullable=False),
         sa.Column("altitude", sa.Float(), nullable=True),
+        sa.Column("country", sa.String(), nullable=True),
+        sa.Column("state", sa.String(), nullable=True),
+        sa.Column("city", sa.String(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP")
         ),
+        sa.ForeignKeyConstraint(["video_id"], ["videos.video_id"]),
         sa.ForeignKeyConstraint(["artifact_id"], ["artifacts.artifact_id"]),
-        sa.ForeignKeyConstraint(["asset_id"], ["videos.video_id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("artifact_id"),
+        sa.UniqueConstraint("video_id"),
     )
 
-    # Index on asset_id for efficient asset-based queries
-    op.create_index("idx_video_locations_asset_id", "video_locations", ["asset_id"])
+    # Index on video_id for efficient video-based queries
+    op.create_index("idx_video_locations_video_id", "video_locations", ["video_id"])
 
     # Index on latitude for geo-queries
     op.create_index("idx_video_locations_latitude", "video_locations", ["latitude"])
@@ -49,10 +52,18 @@ def upgrade() -> None:
         "idx_video_locations_longitude", "video_locations", ["longitude"]
     )
 
+    # Indexes on location fields for searchability
+    op.create_index("idx_video_locations_country", "video_locations", ["country"])
+    op.create_index("idx_video_locations_state", "video_locations", ["state"])
+    op.create_index("idx_video_locations_city", "video_locations", ["city"])
+
 
 def downgrade() -> None:
     """Downgrade schema."""
     # Drop indexes first
+    op.drop_index("idx_video_locations_city", "video_locations")
+    op.drop_index("idx_video_locations_state", "video_locations")
+    op.drop_index("idx_video_locations_country", "video_locations")
     op.drop_index("idx_video_locations_longitude", "video_locations")
     op.drop_index("idx_video_locations_latitude", "video_locations")
     op.drop_index("idx_video_locations_asset_id", "video_locations")

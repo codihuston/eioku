@@ -82,6 +82,7 @@ class VideoResponseSchema(BaseModel):
     duration: float | None = None
     file_size: int | None = None
     file_hash: str | None = None
+    file_created_at: datetime | None = None
     processed_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -96,6 +97,9 @@ class VideoUpdateSchema(BaseModel):
     status: str | None = Field(None, description="Processing status")
     duration: float | None = Field(None, description="Video duration in seconds")
     file_size: int | None = Field(None, description="File size in bytes")
+    file_created_at: datetime | None = Field(
+        None, description="File creation timestamp from EXIF or file system"
+    )
     processed_at: datetime | None = Field(
         None, description="Processing completion time"
     )
@@ -141,3 +145,17 @@ class RunsResponseSchema(BaseModel):
     video_id: str = Field(..., description="Video ID")
     artifact_type: str = Field(..., description="Artifact type")
     runs: list[RunInfoSchema] = Field(..., description="Available runs")
+
+
+class LocationInfoSchema(BaseModel):
+    """Schema for video location information."""
+
+    latitude: float = Field(..., description="Latitude coordinate")
+    longitude: float = Field(..., description="Longitude coordinate")
+    altitude: float | None = Field(None, description="Altitude in meters")
+    country: str | None = Field(None, description="Country name")
+    state: str | None = Field(None, description="State/province name")
+    city: str | None = Field(None, description="City name")
+
+    class Config:
+        from_attributes = True

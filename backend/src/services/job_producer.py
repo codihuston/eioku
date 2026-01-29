@@ -24,6 +24,7 @@ class JobProducer:
         "ocr",
         "place_detection",
         "scene_detection",
+        "metadata_extraction",
     }
 
     def __init__(self, redis_url: str | None = None):
@@ -95,10 +96,10 @@ class JobProducer:
         queue_name = "ml_jobs"
         job_id = f"ml_{task_id}"
 
-        # Enqueue job to ml_jobs queue using arq's XADD
+        # Enqueue job to ml_jobs queue using arq's zadd
+        # arq stores jobs in a sorted set with the queue name as the key
         # The _job_id ensures deduplication if the same task is enqueued twice
-        # Pass all function parameters as positional args to match function signature
-        await self.pool.enqueue_job(
+        job = await self.pool.enqueue_job(
             "process_ml_task",
             task_id,
             task_type,
@@ -109,8 +110,25 @@ class JobProducer:
             _queue_name=queue_name,
         )
 
+        if job is None:
+            logger.warning(
+                f"Job {job_id} already exists in Redis (duplicate enqueue attempt)"
+            )
+            return job_id
+
         logger.info(
             f"Enqueued task {task_id} ({task_type}) to {queue_name} queue "
             f"with job_id {job_id}"
         )
+
+        # Verify job was actually written to Redis
+        jobs_in_queue = await self.pool.zrange(queue_name, 0, -1)
+        if job_id.encode() not in jobs_in_queue:
+            logger.error(
+                f"Job {job_id} was not found in Redis queue {queue_name} "
+                f"after enqueueing. Jobs in queue: {jobs_in_queue}"
+            )
+        else:
+            logger.debug(f"Verified job {job_id} is in Redis queue {queue_name}")
+
         return job_id

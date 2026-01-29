@@ -2,12 +2,26 @@
 # FASTEST OPTION: Uses official PyTorch image with PyTorch pre-baked
 FROM pytorch/pytorch:2.1.2-cuda12.1-cudnn8-runtime
 
+# Set timezone before installing packages to avoid interactive prompts
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install exiftool from pre-built distribution (no compilation needed), apt version is too old
+RUN curl -sL https://sourceforge.net/projects/exiftool/files/Image-ExifTool-13.47.tar.gz/download -o /tmp/Image-ExifTool-13.47.tar.gz && \
+    echo "97efd14de0fea5b29a689dad5334ea9c0600f3d64ebc062e30f3aa89fde3668c  /tmp/Image-ExifTool-13.47.tar.gz" | sha256sum -c - && \
+    tar -xzf /tmp/Image-ExifTool-13.47.tar.gz -C /tmp && \
+    cp /tmp/Image-ExifTool-13.47/exiftool /usr/local/bin/ && \
+    cp -r /tmp/Image-ExifTool-13.47/lib /usr/local/bin/ && \
+    chmod +x /usr/local/bin/exiftool && \
+    rm -rf /tmp/Image-ExifTool-13.47*
 
 # Install Poetry
 RUN pip install --no-cache-dir poetry==1.7.1
@@ -20,9 +34,6 @@ WORKDIR /app
 
 # Copy Poetry files for dependency caching
 COPY ml-service/pyproject.toml ml-service/poetry.lock* ./
-
-# Update lock file after changes to pyproject.toml
-RUN poetry lock --no-update
 
 # Install dependencies with poetry
 RUN poetry install --no-root

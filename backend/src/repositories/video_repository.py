@@ -100,6 +100,33 @@ class SqlVideoRepository(VideoRepository):
         entities = self.session.query(VideoEntity).all()
         return [self._to_domain(entity) for entity in entities]
 
+    def get_location(self, video_id: str) -> dict | None:
+        """Get location information for a video from the video_locations projection."""
+        from sqlalchemy import text
+
+        result = self.session.execute(
+            text(
+                """
+                SELECT latitude, longitude, altitude, country, state, city
+                FROM video_locations
+                WHERE video_id = :video_id
+                """
+            ),
+            {"video_id": video_id},
+        ).fetchone()
+
+        if not result:
+            return None
+
+        return {
+            "latitude": result[0],
+            "longitude": result[1],
+            "altitude": result[2],
+            "country": result[3],
+            "state": result[4],
+            "city": result[5],
+        }
+
     def _to_entity(self, domain: Video) -> VideoEntity:
         """Convert domain model to SQLAlchemy entity."""
         return VideoEntity(
@@ -111,6 +138,7 @@ class SqlVideoRepository(VideoRepository):
             status=domain.status,
             duration=domain.duration,
             file_size=domain.file_size,
+            file_created_at=domain.file_created_at,
             processed_at=domain.processed_at,
         )
 
@@ -125,6 +153,7 @@ class SqlVideoRepository(VideoRepository):
             status=entity.status,
             duration=entity.duration,
             file_size=entity.file_size,
+            file_created_at=entity.file_created_at,
             processed_at=entity.processed_at,
             created_at=entity.created_at,
             updated_at=entity.updated_at,

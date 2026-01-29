@@ -4,7 +4,6 @@ This module implements metadata extraction from video files using pyexiftool,
 extracting standardized Composite fields.
 """
 
-import json
 import logging
 from typing import Any
 
@@ -16,50 +15,50 @@ class MetadataExtractor:
 
     # Composite fields to extract (format-agnostic)
     COMPOSITE_FIELDS = [
-        "Composite:GPSLatitude",
-        "Composite:GPSLongitude",
-        "Composite:GPSAltitude",
-        "Composite:ImageSize",
-        "Composite:Megapixels",
-        "Composite:Rotation",
-        "Composite:AvgBitrate",
-        "Composite:Duration",
-        "Composite:VideoFrameRate",
-        "Composite:VideoCodec",
-        "Composite:FileSize",
-        "Composite:FileType",
-        "Composite:MIMEType",
-        "Composite:Make",
-        "Composite:Model",
-        "Composite:CreateDate",
+        "GPSLatitude",
+        "GPSLongitude",
+        "GPSAltitude",
+        "ImageSize",
+        "Megapixels",
+        "Rotation",
+        "AvgBitrate",
+        "Duration",
+        "VideoFrameRate",
+        "VideoCodec",
+        "FileSize",
+        "FileType",
+        "MIMEType",
+        "Make",
+        "Model",
+        "CreateDate",
     ]
 
     # Field name mappings from exiftool to output format
     FIELD_MAPPINGS = {
-        "Composite:GPSLatitude": "latitude",
-        "Composite:GPSLongitude": "longitude",
-        "Composite:GPSAltitude": "altitude",
-        "Composite:ImageSize": "image_size",
-        "Composite:Megapixels": "megapixels",
-        "Composite:Rotation": "rotation",
-        "Composite:AvgBitrate": "avg_bitrate",
-        "Composite:Duration": "duration_seconds",
-        "Composite:VideoFrameRate": "frame_rate",
-        "Composite:VideoCodec": "codec",
-        "Composite:FileSize": "file_size",
-        "Composite:FileType": "file_type",
-        "Composite:MIMEType": "mime_type",
-        "Composite:Make": "camera_make",
-        "Composite:Model": "camera_model",
-        "Composite:CreateDate": "create_date",
+        "GPSLatitude": "latitude",
+        "GPSLongitude": "longitude",
+        "GPSAltitude": "altitude",
+        "ImageSize": "image_size",
+        "Megapixels": "megapixels",
+        "Rotation": "rotation",
+        "AvgBitrate": "avg_bitrate",
+        "Duration": "duration_seconds",
+        "VideoFrameRate": "frame_rate",
+        "VideoCodec": "codec",
+        "FileSize": "file_size",
+        "FileType": "file_type",
+        "MIMEType": "mime_type",
+        "Make": "camera_make",
+        "Model": "camera_model",
+        "CreateDate": "create_date",
     }
 
     def __init__(self):
         """Initialize metadata extractor."""
         try:
-            import exiftool
+            from exiftool import ExifToolHelper
 
-            self.exiftool = exiftool
+            self.ExifToolHelper = ExifToolHelper
             logger.info("✓ Metadata extractor initialized with pyexiftool")
         except ImportError:
             logger.error("✗ pyexiftool not installed")
@@ -81,15 +80,18 @@ class MetadataExtractor:
             logger.info(f"🎬 Extracting metadata from {video_path}")
 
             # Use exiftool to extract metadata
-            with self.exiftool.ExifTool() as et:
-                # Extract all composite fields
-                metadata = et.get_metadata(video_path)
+            with self.ExifToolHelper() as et:
+                # Extract all metadata (no field filtering)
+                metadata_list = et.get_metadata([video_path])
+                metadata = metadata_list[0] if metadata_list else {}
 
             if not metadata:
                 logger.warning(f"⚠️  No metadata found in {video_path}")
                 return {}
 
-            logger.info(f"✓ Extracted raw metadata from {video_path}")
+            logger.info(
+                f"✓ Extracted raw metadata from {video_path}: {len(metadata)} fields"
+            )
 
             # Transform metadata to standardized format
             result = self._transform_metadata(metadata)
@@ -141,10 +143,19 @@ class MetadataExtractor:
         Returns:
             Field value or None if not found
         """
+        # Try exact match first
         if field_name in metadata:
             value = metadata[field_name]
             if value is not None and value != "":
                 return value
+
+        # Try with common prefixes if exact match fails
+        for prefix in ["Composite:", "EXIF:", "QuickTime:", "File:"]:
+            prefixed_field = f"{prefix}{field_name}"
+            if prefixed_field in metadata:
+                value = metadata[prefixed_field]
+                if value is not None and value != "":
+                    return value
 
         return None
 
@@ -200,9 +211,7 @@ class MetadataExtractor:
             return str(value)
 
         except (ValueError, TypeError) as e:
-            logger.warning(
-                f"⚠️  Failed to convert {output_field} value '{value}': {e}"
-            )
+            logger.warning(f"⚠️  Failed to convert {output_field} value '{value}': {e}")
             return None
 
 

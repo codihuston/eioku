@@ -55,3 +55,7 @@ class VideoService:
     def get_all_videos(self) -> list[Video]:
         """Get all videos regardless of status."""
         return self.video_repository.find_all()
+
+    def get_video_location(self, video_id: str) -> dict | None:
+        """Get location information for a video from the video_locations projection."""
+        return self.video_repository.get_location(video_id)

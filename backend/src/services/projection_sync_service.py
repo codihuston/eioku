@@ -394,6 +394,7 @@ class ProjectionSyncService:
 
         Extracts GPS coordinates from metadata payload and creates an entry
         in the video_locations projection table for geo-spatial queries.
+        Performs reverse geocoding to populate country, state, and city fields.
 
         Args:
             artifact: The video.metadata artifact to synchronize
@@ -440,22 +441,41 @@ class ProjectionSyncService:
             )
             raise ProjectionSyncError(f"Invalid GPS coordinates: {e}") from e
 
+        # Perform reverse geocoding to get location names
+        from src.services.reverse_geocoding_service import ReverseGeocodingService
+
+        logger.info(f"🔄 Starting reverse geocoding for {artifact.artifact_id}")
+        geocoding_service = ReverseGeocodingService()
+        location_info = geocoding_service.get_location_info(latitude, longitude)
+        country = location_info.get("country")
+        state = location_info.get("state")
+        city = location_info.get("city")
+        logger.info(
+            f"✓ Geocoding complete: country={country}, state={state}, city={city}"
+        )
+
         # Determine if we're using PostgreSQL or SQLite
         bind = self.session.bind
         is_postgresql = bind.dialect.name == "postgresql"
 
         if is_postgresql:
-            # PostgreSQL syntax
+            # PostgreSQL syntax - UPSERT on video_id
+            # Each video has only one metadata set, so we overwrite on re-extraction
             sql = text(
                 """
                 INSERT INTO video_locations
-                    (artifact_id, asset_id, latitude, longitude, altitude)
-                VALUES (:artifact_id, :asset_id, :latitude, :longitude, :altitude)
-                ON CONFLICT (artifact_id) DO UPDATE
-                SET asset_id = EXCLUDED.asset_id,
+                    (artifact_id, video_id, latitude, longitude, altitude,
+                     country, state, city)
+                VALUES (:artifact_id, :video_id, :latitude, :longitude, :altitude,
+                        :country, :state, :city)
+                ON CONFLICT (video_id) DO UPDATE
+                SET artifact_id = EXCLUDED.artifact_id,
                     latitude = EXCLUDED.latitude,
                     longitude = EXCLUDED.longitude,
-                    altitude = EXCLUDED.altitude
+                    altitude = EXCLUDED.altitude,
+                    country = EXCLUDED.country,
+                    state = EXCLUDED.state,
+                    city = EXCLUDED.city
                 """
             )
         else:
@@ -463,8 +483,10 @@ class ProjectionSyncService:
             sql = text(
                 """
                 INSERT OR REPLACE INTO video_locations
-                    (artifact_id, asset_id, latitude, longitude, altitude)
-                VALUES (:artifact_id, :asset_id, :latitude, :longitude, :altitude)
+                    (artifact_id, video_id, latitude, longitude, altitude,
+                     country, state, city)
+                VALUES (:artifact_id, :video_id, :latitude, :longitude, :altitude,
+                        :country, :state, :city)
                 """
             )
 
@@ -472,15 +494,19 @@ class ProjectionSyncService:
             sql,
             {
                 "artifact_id": artifact.artifact_id,
-                "asset_id": artifact.asset_id,
+                "video_id": artifact.asset_id,
                 "latitude": latitude,
                 "longitude": longitude,
                 "altitude": altitude,
+                "country": country,
+                "state": state,
+                "city": city,
             },
         )
 
         logger.debug(
             f"Synced video.metadata artifact {artifact.artifact_id} "
             f"to video_locations projection "
-            f"(lat={latitude}, lon={longitude})"
+            f"(lat={latitude}, lon={longitude}, "
+            f"country={country}, state={state}, city={city})"
         )
