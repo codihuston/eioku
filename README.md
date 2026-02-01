@@ -26,6 +26,44 @@ Eioku transforms your video library into a searchable database. You film it, we 
 🎬 [SEE THE VIDEO DEMO HERE](https://www.youtube.com/watch?v=4DD5srIONn0)! 🎬
 ---
 
+## Use Cases
+
+### Example 1
+
+Audience: content creator who produces video essays
+
+Problem: I have 100 GBs / 80+ hours of of video from recording a video game that I cover lore for
+
+Solution: Eioku allows me to find the exact moments I’ve storyboarded for my YouTube video (via on screen text, audio transcripts) vs me opening each video independently to find the relevant moments 
+
+### Example 2
+
+Audience: I am a content creator / corporation / enterprise / business with a trove of content over the years
+
+Problem: what topics have I covered (or not) or mentioned, and what degree of quality did I deliver it in? I can use this to prepare future material / marketing / training material (video or otherwise)
+
+Solution: Eioku in its current form allows you to find exactly when you’ve spoken about. In the future, semantic search makes querying more natural, an LLM integration can review your transcript and opine on improvements to delivery style or script, etc. (transcript), and trends/topics can be surfaced
+
+
+
+### Example 3
+
+Audience: Film editors that get hundreds of GBs of footage from the field production team (sometimes daily!) with tight deadlines on delivery
+
+Problem: I need to find A/B-roll of my travels for my next vlog. Perhaps this video references multiple places, at various periods of time, and I’m comparing experiences (boat rides, hiking excursions, city life)
+
+Solution: Eioku lets you search videos by location, objects, and in the future: recognized faces
+
+### Example 4
+
+Audience: Family and friends who record memorable moments
+
+Problem: Remember that one time when person X did that thing Y? Can we compile a video focused on person Z over the past year?
+
+Solution: Eioku’s features let you quickly find and relive those moments, and makes compiling them for that special sentimental video much less daunting of a task
+
+---
+
 ## What It Does
 
 - **Automatic ML Analysis**: Drop videos in a folder, Eioku automatically runs:
