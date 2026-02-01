@@ -1,5 +1,5 @@
 - [Eioku - Video Intelligence Platform](#eioku---video-intelligence-platform)
-  - [Use Cases](#usecases)
+  - [Use Cases](#use-cases)
   - [🎬 SEE THE VIDEO DEMO HERE! 🎬](#-see-the-video-demo-here-)
   - [What It Does](#what-it-does)
   - [Demo Checklist](#demo-checklist)
